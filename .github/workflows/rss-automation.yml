@@ -1,0 +1,52 @@
+name: RSS to WordPress Automation
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  publish-articles:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Restore processed database
+        uses: actions/cache@v4
+        with:
+          path: processed.db
+          key: processed-db-${{ github.run_id }}
+          restore-keys: |
+            processed-db-
+      
+      - name: Run RSS automation
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          RSS_FEEDS: ${{ secrets.RSS_FEEDS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: python main.py
+      
+      - name: Save processed database
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: processed.db
+          key: processed-db-${{ github.run_id }}
