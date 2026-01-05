@@ -142,12 +142,13 @@ def get_entry_raw(entry) -> dict:
     }
 
 
-def fetch_feeds_with_raw(feed_urls: List[str]) -> List[tuple]:
+def fetch_feeds_with_raw(feed_urls: List[str], max_entries_per_feed: int = 5) -> List[tuple]:
     """
     Fetch feeds and return both parsed entries and raw data for image extraction.
     
     Args:
         feed_urls: List of RSS feed URLs.
+        max_entries_per_feed: Maximum number of entries to fetch per feed (default: 5).
         
     Returns:
         List of tuples (FeedEntry, raw_entry_dict).
@@ -163,11 +164,18 @@ def fetch_feeds_with_raw(feed_urls: List[str]) -> List[tuple]:
             if feed.bozo and feed.bozo_exception:
                 logger.warning(f"Feed parsing issue for {feed_url}: {feed.bozo_exception}")
             
-            for entry in feed.entries:
+            # Limit to max_entries_per_feed most recent entries
+            entries_to_process = feed.entries[:max_entries_per_feed]
+            feed_entry_count = 0
+            
+            for entry in entries_to_process:
                 parsed_entry = _parse_entry(entry, feed_url)
                 if parsed_entry:
                     raw_data = get_entry_raw(entry)
                     results.append((parsed_entry, raw_data))
+                    feed_entry_count += 1
+            
+            logger.info(f"Fetched {feed_entry_count} entries from {feed_url} (limited to {max_entries_per_feed})")
                     
         except Exception as e:
             logger.error(f"Failed to fetch feed {feed_url}: {e}")
