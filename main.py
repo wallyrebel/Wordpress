@@ -173,8 +173,9 @@ def run_feed_processing(config: Config, logger: logging.Logger) -> tuple[int, in
         return 0, 1, []
     
     # Fetch all feeds
-    entries_with_raw = fetch_feeds_with_raw(config.rss_feeds)
-    logger.info(f"Fetched {len(entries_with_raw)} total entries from all feeds")
+    # Filter for last 24 hours to prevent backfilling old content
+    entries_with_raw = fetch_feeds_with_raw(config.rss_feeds, max_age_hours=24)
+    logger.info(f"Fetched {len(entries_with_raw)} total entries from all feeds (last 24h)")
     
     # Filter out already processed entries
     new_entries = []

@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 import feedparser
+
+import requests
+from bs4 import BeautifulSoup
 from time import mktime
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,48 @@ class FeedEntry:
     summary: str
     content: str
     feed_url: str
+
+
+def _fetch_full_content(url: str) -> Optional[str]:
+    """
+    Attempt to scrape full article content from the source URL.
+    
+    Args:
+        url: The URL to scrape.
+        
+    Returns:
+        Scraped content text or None if failed.
+    """
+    try:
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        if response.status_code != 200:
+            logger.warning(f"Failed to fetch {url}: {response.status_code}")
+            return None
+            
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Try specific selectors
+        selectors = [
+            '.sidearm-story-template-text',  # Sidearm Sports (BMCU)
+            '.article-body',
+            '.story-content',
+            'article',
+            '#main-content'
+        ]
+        
+        for selector in selectors:
+            content_div = soup.select_one(selector)
+            if content_div:
+                text = content_div.get_text(separator='\n\n')
+                if len(text.strip()) > 300: # Ensure we got something substantial
+                    logger.info(f"Scraped full content using selector '{selector}' ({len(text)} chars)")
+                    return text
+                    
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error scraping {url}: {e}")
+        return None
 
 
 def parse_feed(feed_url: str) -> List[FeedEntry]:
@@ -107,6 +152,13 @@ def _parse_entry(entry, feed_url: str) -> Optional[FeedEntry]:
             content = entry.content[0].get('value', '')
         if not content:
             content = summary
+            
+        # Fallback scraping logic for short content
+        if len(content) < 500 and link:
+            logger.info(f"Content short ({len(content)} chars), attempting to scrape full content...")
+            full_content = _fetch_full_content(link)
+            if full_content:
+                content = full_content
         
         return FeedEntry(
             guid=guid,
@@ -142,18 +194,25 @@ def get_entry_raw(entry) -> dict:
     }
 
 
-def fetch_feeds_with_raw(feed_urls: List[str], max_entries_per_feed: int = 5) -> List[tuple]:
+
+def fetch_feeds_with_raw(
+    feed_urls: List[str], 
+    max_entries_per_feed: int = 5,
+    max_age_hours: Optional[int] = 24
+) -> List[tuple]:
     """
     Fetch feeds and return both parsed entries and raw data for image extraction.
     
     Args:
         feed_urls: List of RSS feed URLs.
         max_entries_per_feed: Maximum number of entries to fetch per feed (default: 5).
+        max_age_hours: Only return entries published within this many hours. None to disable.
         
     Returns:
         List of tuples (FeedEntry, raw_entry_dict).
     """
     results = []
+    cutoff_time = datetime.now().timestamp() - (max_age_hours * 3600) if max_age_hours else 0
     
     for feed_url in feed_urls:
         logger.info(f"Fetching feed: {feed_url}")
@@ -170,12 +229,20 @@ def fetch_feeds_with_raw(feed_urls: List[str], max_entries_per_feed: int = 5) ->
             
             for entry in entries_to_process:
                 parsed_entry = _parse_entry(entry, feed_url)
+                
                 if parsed_entry:
+                    # Date filtering
+                    if max_age_hours and parsed_entry.published:
+                        entry_time = parsed_entry.published.timestamp()
+                        if entry_time < cutoff_time:
+                            logger.debug(f"Skipping old entry: {parsed_entry.title} ({parsed_entry.published})")
+                            continue
+                    
                     raw_data = get_entry_raw(entry)
                     results.append((parsed_entry, raw_data))
                     feed_entry_count += 1
             
-            logger.info(f"Fetched {feed_entry_count} entries from {feed_url} (limited to {max_entries_per_feed})")
+            logger.info(f"Fetched {feed_entry_count} entries from {feed_url} (limit: {max_entries_per_feed}, max_age: {max_age_hours}h)")
                     
         except Exception as e:
             logger.error(f"Failed to fetch feed {feed_url}: {e}")
@@ -183,3 +250,4 @@ def fetch_feeds_with_raw(feed_urls: List[str], max_entries_per_feed: int = 5) ->
     
     logger.info(f"Total entries fetched: {len(results)}")
     return results
+
