@@ -34,3 +34,4 @@ https://bmcusports.com/rss.aspx?path=mcross
 https://bmcusports.com/rss.aspx?path=wcross
 https://bmcusports.com/rss.aspx?path=mtrack
 https://bmcusports.com/rss.aspx?path=wtrack
+https://fetchrss.com/feed/1vcaujD2G3c21vfgOm7bS9wZ.rss
