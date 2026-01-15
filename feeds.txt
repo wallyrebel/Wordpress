@@ -37,3 +37,4 @@ https://bmcusports.com/rss.aspx?path=wtrack
 https://fetchrss.com/feed/1vcaujD2G3c21vfgOm7bS9wZ.rss
 https://fetchrss.com/feed/1vcaujD2G3c21vgRa32cwGqA.rss
 https://fetchrss.com/feed/1vcaujD2G3c21vgRbd814AFe.rss
+https://fetchrss.com/feed/1vcaujD2G3c21vgRde3544mM.rss
