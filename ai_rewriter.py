@@ -23,24 +23,38 @@ class RewrittenArticle:
 
 
 # System prompt for AP-style rewriting
-AP_STYLE_SYSTEM_PROMPT = """You are a professional news editor at a major wire service. Your task is to rewrite articles in Associated Press (AP) style.
+AP_STYLE_SYSTEM_PROMPT = """You are a professional news editor at a major wire service. Your task is to rewrite articles in strict Associated Press (AP) style, producing comprehensive, publication-ready news articles.
 
-AP Style Guidelines:
-- Use active voice and strong verbs
-- Lead with the most important information (inverted pyramid)
-- Keep paragraphs short (1-3 sentences)
-- Use present tense for headlines
-- Attribute sources clearly
-- Avoid jargon and explain technical terms
-- Use numerals for 10 and above, spell out one through nine
-- Capitalize proper nouns, titles before names
-- Use objective, neutral language
-- Keep sentences concise and clear
+## Core AP Style Guidelines:
+- **Inverted Pyramid Structure**: Lead with the most newsworthy information (who, what, when, where, why, how), then provide supporting details in descending order of importance
+- **Active Voice**: Use strong, active verbs throughout
+- **Short Paragraphs**: Keep paragraphs to 1-3 sentences for readability
+- **Headlines**: Use present tense, active voice; omit articles (a, an, the) when possible
+- **Attribution**: Clearly attribute all sources and quotes; use "said" as the primary verb for attribution
+- **Numbers**: Spell out one through nine; use numerals for 10 and above; always use numerals for ages, percentages, and measurements
+- **Titles**: Capitalize formal titles only when used directly before a name
+- **Objectivity**: Maintain neutral, factual language without editorializing
 
+## Article Length & Depth Requirements:
+- **Minimum Article Length**: Produce articles of AT LEAST 120 words. This is the absolute minimum.
+- **Expand with Context**: When source information is limited, add relevant background context such as:
+  - Who/what the subject is and their significance
+  - Historical context or previous related events
+  - Why this news matters to readers
+  - Implications or what happens next
+  - Relevant statistics or facts that enhance understanding
+
+## CRITICAL - Accuracy Rules:
+- **NEVER fabricate quotes, statistics, specific facts, or any information not present in the source material**
+- **Only add verifiable, general background context** (e.g., what an organization is known for, general location information)
+- **When details are limited or the story is developing**: End the article with a closing sentence such as "We will provide more information as it becomes available." or "This is a developing story and will be updated as more details emerge."
+- **Accuracy is paramount**: It is better to have a shorter, accurate article than a longer article with fabricated details
+
+## Response Format:
 You must respond with a valid JSON object containing exactly these keys:
-- "headline": A concise, AP-style headline (max 100 characters)
-- "body": The full rewritten article in AP style with proper HTML paragraph tags
-- "category": A single category that best fits the article (e.g., "News", "Politics", "Business", "Technology", "Sports", "Entertainment", "Health", "Science")
+- "headline": A concise, AP-style headline (max 100 characters, present tense, active voice)
+- "body": The full rewritten article in AP style with proper HTML paragraph tags (<p></p>). Must be at least 120 words. Use 3-6 paragraphs.
+- "category": A single category that best fits the article (e.g., "News", "Politics", "Business", "Technology", "Sports", "Entertainment", "Health", "Science", "Education", "Local")
 - "tags": An array of 3-5 relevant tags as lowercase strings
 
 Important: Return ONLY the JSON object, no additional text or markdown formatting."""
@@ -80,10 +94,27 @@ def rewrite_article(
             clean_content = clean_content[:max_content_length] + "..."
             logger.info("Truncated content due to length")
         
+        # Determine if source content is limited
+        source_word_count = len(clean_content.split())
+        content_guidance = ""
+        if source_word_count < 100:
+            content_guidance = """
+NOTE: The source material is brief. Please expand this into an article of at least 120 words by:
+- Adding relevant background context about the subject/organization
+- Explaining the significance of this news
+- Providing any general context that helps readers understand the story
+- If details are limited, end with: "We will provide more information as it becomes available."
+CRITICAL: Do NOT fabricate specific quotes, statistics, or facts not in the source."""
+        elif source_word_count < 200:
+            content_guidance = """
+NOTE: Please ensure the rewritten article is at least 120 words with proper context and background. Do NOT fabricate any facts."""
+
         user_prompt = f"""Please rewrite the following article in AP style:
 
 Title: {title}
 Source URL: {link}
+Source word count: approximately {source_word_count} words
+{content_guidance}
 
 Content:
 {clean_content}
