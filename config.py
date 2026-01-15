@@ -6,10 +6,14 @@ Loads settings from environment variables.
 import os
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# Path to feeds.txt file (relative to this config file)
+FEEDS_FILE_PATH = Path(__file__).parent / "feeds.txt"
 
 
 @dataclass
@@ -44,13 +48,12 @@ def load_config() -> Config:
     """
     load_dotenv()
     
-    # Required fields
+    # Required fields (RSS_FEEDS no longer required - we read from feeds.txt)
     required_vars = {
         'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
         'WP_URL': os.getenv('WP_URL'),
         'WP_USERNAME': os.getenv('WP_USERNAME'),
         'WP_APP_PASSWORD': os.getenv('WP_APP_PASSWORD'),
-        'RSS_FEEDS': os.getenv('RSS_FEEDS'),
     }
     
     # Check for missing required variables
@@ -58,10 +61,21 @@ def load_config() -> Config:
     if missing:
         raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
     
-    # Parse RSS feeds (comma-separated)
-    rss_feeds = [url.strip() for url in required_vars['RSS_FEEDS'].split(',') if url.strip()]
+    # Load RSS feeds from feeds.txt file (primary) or RSS_FEEDS env var (fallback)
+    rss_feeds = []
+    if FEEDS_FILE_PATH.exists():
+        with open(FEEDS_FILE_PATH, 'r') as f:
+            rss_feeds = [line.strip() for line in f if line.strip()]
+        logger.info(f"Loaded {len(rss_feeds)} RSS feeds from {FEEDS_FILE_PATH}")
+    else:
+        # Fallback to environment variable
+        rss_feeds_env = os.getenv('RSS_FEEDS', '')
+        if rss_feeds_env:
+            rss_feeds = [url.strip() for url in rss_feeds_env.split(',') if url.strip()]
+            logger.info(f"Loaded {len(rss_feeds)} RSS feeds from RSS_FEEDS environment variable")
+    
     if not rss_feeds:
-        raise ValueError("RSS_FEEDS must contain at least one valid URL")
+        raise ValueError("No RSS feeds found. Add feeds to feeds.txt or set RSS_FEEDS environment variable.")
     
     # Optional fields with defaults
     poll_interval = int(os.getenv('POLL_INTERVAL_MINUTES', '30'))
