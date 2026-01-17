@@ -90,7 +90,6 @@ def process_single_entry(
             raw_entry=raw_entry,
             title=entry.title,
             content=entry.content,
-            openai_client=openai_client,
             image_dir=config.image_dir
         )
         

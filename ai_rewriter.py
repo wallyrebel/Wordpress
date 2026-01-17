@@ -65,51 +65,52 @@ def rewrite_article(
     content: str,
     link: str,
     openai_client,
-    model: str = "gpt-4.1-nano"
+    primary_model: str = "gpt-5-mini",
+    fallback_model: str = "gpt-4.1-nano"
 ) -> Optional[RewrittenArticle]:
     """
-    Rewrite an article in AP style using GPT-4.
+    Rewrite an article in AP style using GPT.
     
     Args:
         title: Original article title.
         content: Original article content (may contain HTML).
         link: URL of the original article.
         openai_client: Initialized OpenAI client.
-        model: OpenAI model to use.
+        primary_model: Primary OpenAI model to use.
+        fallback_model: Fallback model if primary fails.
         
     Returns:
         RewrittenArticle object or None if rewriting fails.
     """
-    try:
-        # Clean HTML from content
-        clean_content = _strip_html(content)
-        
-        if not clean_content.strip():
-            logger.warning("Article content is empty after cleaning")
-            clean_content = title  # Fall back to title
-        
-        # Truncate very long content to avoid token limits
-        max_content_length = 8000
-        if len(clean_content) > max_content_length:
-            clean_content = clean_content[:max_content_length] + "..."
-            logger.info("Truncated content due to length")
-        
-        # Determine if source content is limited
-        source_word_count = len(clean_content.split())
-        content_guidance = ""
-        if source_word_count < 100:
-            content_guidance = """
+    # Clean HTML from content
+    clean_content = _strip_html(content)
+    
+    if not clean_content.strip():
+        logger.warning("Article content is empty after cleaning")
+        clean_content = title  # Fall back to title
+    
+    # Truncate very long content to avoid token limits
+    max_content_length = 8000
+    if len(clean_content) > max_content_length:
+        clean_content = clean_content[:max_content_length] + "..."
+        logger.info("Truncated content due to length")
+    
+    # Determine if source content is limited
+    source_word_count = len(clean_content.split())
+    content_guidance = ""
+    if source_word_count < 100:
+        content_guidance = """
 NOTE: The source material is brief. Please expand this into an article of at least 120 words by:
 - Adding relevant background context about the subject/organization
 - Explaining the significance of this news
 - Providing any general context that helps readers understand the story
 - If details are limited, end with: "We will provide more information as it becomes available."
 CRITICAL: Do NOT fabricate specific quotes, statistics, or facts not in the source."""
-        elif source_word_count < 200:
-            content_guidance = """
+    elif source_word_count < 200:
+        content_guidance = """
 NOTE: Please ensure the rewritten article is at least 120 words with proper context and background. Do NOT fabricate any facts."""
 
-        user_prompt = f"""Please rewrite the following article in AP style:
+    user_prompt = f"""Please rewrite the following article in AP style:
 
 Title: {title}
 Source URL: {link}
@@ -121,53 +122,63 @@ Content:
 
 Remember to respond with only a valid JSON object."""
 
-        logger.info(f"Rewriting article: {title[:60]}...")
-        
-        response = openai_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": AP_STYLE_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"}
-        )
-        
-        response_text = response.choices[0].message.content
-        
-        # Parse the JSON response
-        article_data = _parse_json_response(response_text)
-        
-        if not article_data:
-            logger.error("Failed to parse GPT response as JSON")
-            return None
-        
-        # Validate required fields
-        headline = article_data.get('headline', title)
-        body = article_data.get('body', '')
-        category = article_data.get('category', 'News')
-        tags = article_data.get('tags', [])
-        
-        # Ensure tags is a list
-        if isinstance(tags, str):
-            tags = [tags]
-        tags = [str(tag).lower().strip() for tag in tags if tag]
-        
-        # Format body with HTML paragraphs if not already formatted
-        body = _ensure_html_paragraphs(body)
-        
-        logger.info(f"Article rewritten successfully: {headline[:60]}...")
-        
-        return RewrittenArticle(
-            headline=headline,
-            body=body,
-            category=category,
-            tags=tags
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to rewrite article: {e}")
-        return None
+    # Try primary model first, then fallback
+    models_to_try = [primary_model, fallback_model]
+    
+    for model in models_to_try:
+        try:
+            logger.info(f"Rewriting article with {model}: {title[:60]}...")
+            
+            response = openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": AP_STYLE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            response_text = response.choices[0].message.content
+            
+            # Parse the JSON response
+            article_data = _parse_json_response(response_text)
+            
+            if not article_data:
+                logger.error(f"Failed to parse GPT response as JSON with {model}")
+                continue  # Try fallback model
+            
+            # Validate required fields
+            headline = article_data.get('headline', title)
+            body = article_data.get('body', '')
+            category = article_data.get('category', 'News')
+            tags = article_data.get('tags', [])
+            
+            # Ensure tags is a list
+            if isinstance(tags, str):
+                tags = [tags]
+            tags = [str(tag).lower().strip() for tag in tags if tag]
+            
+            # Format body with HTML paragraphs if not already formatted
+            body = _ensure_html_paragraphs(body)
+            
+            logger.info(f"Article rewritten successfully with {model}: {headline[:60]}...")
+            
+            return RewrittenArticle(
+                headline=headline,
+                body=body,
+                category=category,
+                tags=tags
+            )
+            
+        except Exception as e:
+            logger.warning(f"Failed to rewrite with {model}: {e}")
+            if model == fallback_model:
+                logger.error(f"All models failed to rewrite article: {title}")
+                return None
+            logger.info(f"Falling back to {fallback_model}...")
+            continue
+    
+    return None
 
 
 def _strip_html(html: str) -> str:

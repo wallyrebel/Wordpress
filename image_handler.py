@@ -1,6 +1,6 @@
 """
 Image Handler module.
-Extracts images from feed entries or generates them using DALL-E.
+Extracts images from feed entries or fetches stock photos from Pexels.
 """
 
 import os
@@ -8,7 +8,7 @@ import re
 import logging
 import hashlib
 import mimetypes
-from typing import Optional, Tuple
+from typing import Optional
 from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 # Timeout for image downloads
 REQUEST_TIMEOUT = 30
+
+# Pexels API for keyword-matched stock photos
+PEXELS_API_URL = "https://api.pexels.com/v1/search"
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 
 
 def extract_image_url(raw_entry: dict) -> Optional[str]:
@@ -106,7 +110,8 @@ def download_image(image_url: str, image_dir: str) -> Optional[str]:
         response = requests.get(
             image_url,
             timeout=REQUEST_TIMEOUT,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSS-Bot/1.0'}
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSS-Bot/1.0'},
+            allow_redirects=True
         )
         response.raise_for_status()
         
@@ -152,102 +157,137 @@ def _get_extension_from_content_type(content_type: str) -> Optional[str]:
     return ext
 
 
-def generate_image_with_dalle(
-    prompt: str,
-    openai_client,
-    image_dir: str,
-    size: str = "1024x1024"
-) -> Optional[str]:
+def create_search_query(title: str) -> str:
     """
-    Generate an image using DALL-E 3.
+    Create a search query for stock photo APIs based on article title.
     
     Args:
-        prompt: Text prompt for image generation.
-        openai_client: Initialized OpenAI client.
-        image_dir: Directory to save the generated image.
-        size: Image size (DALL-E 3 supports: 1024x1024, 1024x1792, 1792x1024).
+        title: Article title.
+        
+    Returns:
+        A search query string with key terms.
+    """
+    # Common stop words to filter out
+    stop_words = {
+        'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+        'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+        'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
+        'this', 'that', 'these', 'those', 'it', 'its', 'as', 'if', 'when',
+        'where', 'how', 'what', 'which', 'who', 'whom', 'why', 'so', 'than',
+        'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'some',
+        'any', 'all', 'both', 'each', 'few', 'more', 'most', 'other', 'into',
+        'over', 'after', 'before', 'between', 'under', 'again', 'further',
+        'once', 'during', 'out', 'up', 'down', 'off', 'about', 'only', 'same',
+        'new', 'says', 'said', 'announces', 'announced', 'reports', 'reported'
+    }
+    
+    # Extract words, filter stop words, take first 3 meaningful words
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', title.lower())
+    keywords = [w for w in words if w not in stop_words][:3]
+    
+    if not keywords:
+        # Fallback to "news" if no keywords found
+        return "news"
+    
+    return " ".join(keywords)
+
+
+def fetch_pexels_image(title: str, image_dir: str) -> Optional[str]:
+    """
+    Fetch a keyword-matched stock photo from Pexels API.
+    
+    Args:
+        title: Article title to derive search keywords.
+        image_dir: Directory to save the image.
         
     Returns:
         Local file path if successful, None otherwise.
     """
+    if not PEXELS_API_KEY:
+        logger.warning("PEXELS_API_KEY not set, skipping Pexels image fetch")
+        return None
+    
     try:
-        logger.info(f"Generating image with DALL-E: {prompt[:100]}...")
+        query = create_search_query(title)
+        logger.info(f"Searching Pexels for: {query}")
         
-        # DALL-E 3 only supports specific sizes, use closest match
-        # Requested 1024x600 is not supported, using 1024x1024 instead
-        valid_sizes = ["1024x1024", "1024x1792", "1792x1024"]
-        if size not in valid_sizes:
-            size = "1024x1024"
-        
-        response = openai_client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size=size,
-            quality="standard",
-            n=1,
+        # Search Pexels API
+        response = requests.get(
+            PEXELS_API_URL,
+            params={
+                "query": query,
+                "per_page": 1,
+                "orientation": "landscape"
+            },
+            headers={
+                "Authorization": PEXELS_API_KEY,
+                "User-Agent": "RSS-Bot/1.0"
+            },
+            timeout=REQUEST_TIMEOUT
         )
+        response.raise_for_status()
         
-        image_url = response.data[0].url
+        data = response.json()
+        photos = data.get("photos", [])
         
-        # Download the generated image
-        img_response = requests.get(image_url, timeout=REQUEST_TIMEOUT)
+        if not photos:
+            logger.warning(f"No Pexels images found for: {query}")
+            return None
+        
+        # Get the large image URL
+        image_url = photos[0].get("src", {}).get("large")
+        if not image_url:
+            logger.warning("Pexels photo missing image URL")
+            return None
+        
+        logger.info(f"Found Pexels image: {image_url}")
+        
+        # Download the image
+        img_response = requests.get(
+            image_url,
+            timeout=REQUEST_TIMEOUT,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSS-Bot/1.0'}
+        )
         img_response.raise_for_status()
         
-        # Generate filename
-        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()[:12]
-        filename = f"dalle_{prompt_hash}.png"
+        # Generate filename based on title hash
+        title_hash = hashlib.md5(title.encode()).hexdigest()[:12]
+        content_type = img_response.headers.get('Content-Type', '')
+        ext = _get_extension_from_content_type(content_type) or '.jpg'
+        filename = f"pexels_{title_hash}{ext}"
         filepath = os.path.join(image_dir, filename)
         
         with open(filepath, 'wb') as f:
             f.write(img_response.content)
         
-        logger.info(f"DALL-E image saved to: {filepath}")
+        logger.info(f"Pexels image saved to: {filepath}")
         return filepath
         
-    except Exception as e:
-        logger.error(f"Failed to generate image with DALL-E: {e}")
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch Pexels image: {e}")
         return None
-
-
-def create_image_prompt(title: str, content: str) -> str:
-    """
-    Create a descriptive prompt for DALL-E based on article content.
-    
-    Args:
-        title: Article title.
-        content: Article content or summary.
-        
-    Returns:
-        A prompt suitable for image generation.
-    """
-    # Clean HTML from content
-    soup = BeautifulSoup(content, 'html.parser')
-    clean_text = soup.get_text()[:500]  # Limit length
-    
-    # Create a news-appropriate prompt
-    prompt = f"""A professional news photograph for an article titled "{title}". 
-    The image should be photorealistic, well-lit, and suitable for a news publication. 
-    Context from the article: {clean_text[:200]}
-    Style: Professional news photography, no text or watermarks."""
-    
-    return prompt
+    except (KeyError, IndexError) as e:
+        logger.error(f"Failed to parse Pexels response: {e}")
+        return None
+    except IOError as e:
+        logger.error(f"Failed to save Pexels image: {e}")
+        return None
 
 
 def get_or_create_image(
     raw_entry: dict,
     title: str,
     content: str,
-    openai_client,
     image_dir: str
 ) -> Optional[str]:
     """
-    Get an image for an article - either extract from feed or generate with DALL-E.
+    Get an image for an article - extract from feed or fetch from Pexels.
     
     Args:
         raw_entry: Raw feed entry data for image extraction.
-        title: Article title for DALL-E prompt.
-        content: Article content for DALL-E prompt.
-        openai_client: Initialized OpenAI client.
+        title: Article title for Pexels search.
+        content: Article content (unused, kept for compatibility).
         image_dir: Directory to save images.
         
     Returns:
@@ -255,14 +295,13 @@ def get_or_create_image(
     """
     os.makedirs(image_dir, exist_ok=True)
     
-    # Try to extract existing image
+    # Try to extract existing image from RSS feed
     image_url = extract_image_url(raw_entry)
     if image_url:
         filepath = download_image(image_url, image_dir)
         if filepath:
             return filepath
-        logger.warning("Failed to download extracted image, falling back to DALL-E")
+        logger.warning("Failed to download extracted image, falling back to Pexels")
     
-    # Generate image with DALL-E
-    prompt = create_image_prompt(title, content)
-    return generate_image_with_dalle(prompt, openai_client, image_dir)
+    # Fetch keyword-matched stock photo from Pexels
+    return fetch_pexels_image(title, image_dir)
