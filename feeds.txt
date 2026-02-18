@@ -41,3 +41,4 @@ https://fetchrss.com/feed/1vcaujD2G3c21vgRde3544mM.rss
 https://fetchrss.com/feed/1vcaujD2G3c21vgSqC6rM0Ac.rss
 https://fetchrss.com/feed/1vcaujD2G3c21vgTBo0Y07SU.rss
 https://fetchrss.com/feed/1vcaujD2G3c21vgnMq7Q85FC.rss
+https://wallyrebel.github.io/newscraper/darkhorse-top-story.xml
