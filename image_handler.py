@@ -6,13 +6,19 @@ from pathlib import Path
 from dataclasses import dataclass
 from bs4 import BeautifulSoup
 from PIL import Image
+from requests import RequestException
 from safe_http import fetch_bytes
+
+IMAGE_POLICY_VERSION = "source-image-v2-600x400"
+MIN_IMAGE_WIDTH = 600
+MIN_IMAGE_HEIGHT = 400
 
 @dataclass
 class NewsImage:
     path: str
     credit: str
     source_url: str
+    width: int = 0
 
 def extract_image_url(raw):
     return next(iter(image_candidates(raw)), None)
@@ -35,14 +41,18 @@ def image_candidates(raw):
 def get_source_image(raw, policy, image_dir):
     if not policy.image_reuse_allowed or not policy.image_credit.strip():
         return None
+    best = None
     for url in image_candidates(raw):
         try:
             image = download_candidate(url, policy, image_dir)
             if image:
-                return image
-        except (ValueError, OSError):
+                if image.width >= 1200:
+                    return image
+                if best is None or image.width > best.width:
+                    best = image
+        except (ValueError, OSError, RequestException):
             continue
-    return None
+    return best
 
 def download_candidate(url, policy, image_dir):
     data, mime, final = fetch_bytes(url, max_bytes=10_000_000)
@@ -53,11 +63,12 @@ def download_candidate(url, policy, image_dir):
         with Image.open(io.BytesIO(data)) as probe:
             probe.verify()
         with Image.open(io.BytesIO(data)) as image:
-            if image.width < 1200 or image.height < 400 or image.width / image.height > 3.5:
+            if image.width < MIN_IMAGE_WIDTH or image.height < MIN_IMAGE_HEIGHT or image.width / image.height > 3.5:
                 return None
             image = image.convert("RGB")
             image.thumbnail((2400, 2400))
+            width = image.width
             path = Path(image_dir) / (hashlib.sha256(data).hexdigest()[:24] + ".jpg")
             path.parent.mkdir(parents=True, exist_ok=True)
             image.save(path, "JPEG", quality=88, optimize=True)
-    return NewsImage(str(path), policy.image_credit, final)
+    return NewsImage(str(path), policy.image_credit, final, width)

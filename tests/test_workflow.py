@@ -314,6 +314,36 @@ class PublishingTests(unittest.TestCase):
 
 
 class ImageTests(unittest.TestCase):
+    def test_source_photo_720px_is_usable_without_upscaling(self):
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new("RGB", (720, 960)).save(buffer, "JPEG")
+        with tempfile.TemporaryDirectory() as tmp, patch("image_handler.fetch_bytes",
+                return_value=(buffer.getvalue(), "image/jpeg", "https://example.org/photo.jpg")):
+            image = get_source_image({"media_content": [{"url": "https://example.org/photo.jpg"}]},
+                                     SourcePolicy(image_credit="Police department"), tmp)
+            self.assertIsNotNone(image)
+            with Image.open(image.path) as saved:
+                self.assertEqual(saved.size, (720, 960))
+
+    def test_large_source_is_preferred_over_usable_small_source(self):
+        from image_handler import NewsImage
+        with patch("image_handler.download_candidate", side_effect=[
+                NewsImage("small.jpg", "Credit", "https://example.org/small.jpg", 720),
+                NewsImage("large.jpg", "Credit", "https://example.org/large.jpg", 1600)]):
+            image = get_source_image({"media_content": [{"url": "https://example.org/small.jpg"},
+                {"url": "https://example.org/large.jpg"}]}, SourcePolicy(image_credit="Credit"), "unused")
+        self.assertEqual(image.width, 1600)
+
+    def test_failed_candidate_does_not_hide_valid_source_image(self):
+        from requests import HTTPError
+        with patch("image_handler.download_candidate", side_effect=[HTTPError("expired"),
+                NewsImage("photo.jpg", "Credit", "https://example.org/photo.jpg", 720)]):
+            image = get_source_image({"media_content": [{"url": "https://example.org/expired.jpg"},
+                {"url": "https://example.org/photo.jpg"}]}, SourcePolicy(image_credit="Credit"), "unused")
+        self.assertEqual(image.width, 720)
+
     def test_thumbnail_fallback_to_large_image(self):
         import io
         from PIL import Image
@@ -342,6 +372,17 @@ class ImageTests(unittest.TestCase):
             fetch.assert_not_called()
 
 class AdditionalValidationTests(unittest.TestCase):
+    def test_whole_hour_ap_style_keeps_same_numeric_value(self):
+        self.assertEqual(numeric_tokens("from 10:00 p.m. to 1:00 a.m."),
+                         numeric_tokens("from 10 p.m. to 1 a.m."))
+        self.assertNotEqual(numeric_tokens("at 10:30 p.m."), numeric_tokens("at 10 p.m."))
+        self.assertNotEqual(numeric_tokens("at 10:00 p.m."), numeric_tokens("at 11 p.m."))
+        generated = draft()
+        generated.paragraphs[0].text = "Tupelo Library plans a book sale at 10 a.m."
+        result = rewrite_article("Sale", SOURCE.replace("10 a.m.", "10:00 a.m."),
+                                 "https://example.org", fake_client(generated=generated))
+        self.assertTrue(result.body)
+
     def test_date_punctuation_not_a_changed_number(self):
         generated=draft()
         generated.paragraphs[0].text="Tupelo Library plans a book sale Sept. 12, starting at 10 a.m."

@@ -9,7 +9,7 @@ It publishes automatically only when every requirement passes:
 - Evidence quotations that actually occur in the source.
 - A headline, excerpt and body that pass structure, numeric and factual checks.
 - No unresolved factual issues. Sensitive subjects receive a stronger verification pass and can publish when they pass. Source corrections are held locally.
-- A decoded, usable featured image at least 1,200 pixels wide.
+- A decoded, usable featured image at least 600 pixels wide and 400 pixels high; 1,200-pixel sources are preferred when supplied. Images are never enlarged to pass validation.
 - An existing WordPress category and at least one supported entity tag.
 - Successful image upload and server-side validation.
 

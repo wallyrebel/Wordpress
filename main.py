@@ -15,7 +15,7 @@ from ai_rewriter import rewrite_article, fingerprint, clean_text, InsufficientSo
 from config import load_config
 from database import Store
 from feed_parser import fetch_feeds_with_raw, enrich_entry
-from image_handler import get_source_image
+from image_handler import get_source_image, IMAGE_POLICY_VERSION
 from wordpress_api import WordPressAPI
 
 logger = logging.getLogger(__name__)
@@ -60,13 +60,15 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
             policy = replace(policy, publisher=policy.publisher or entry.publisher,
                 image_credit=policy.image_credit or ("Source: " + (policy.publisher or entry.publisher)))
             original_hash = fingerprint(entry.title, entry.content + json.dumps(raw, sort_keys=True, default=str)
-                + PROMPT_VERSION + config.extraction_model + config.drafting_model
+                + PROMPT_VERSION + IMAGE_POLICY_VERSION + config.extraction_model + config.drafting_model
                 + json.dumps(asdict(policy), sort_keys=True) + json.dumps(config.category_ids, sort_keys=True))
             prior = {}
             try:
                 cached = store.get(key) if store else None
                 if cached and cached.get("feed_hash") == original_hash:
                     stats["duplicates"] += 1
+                    if cached.get("status") in ("held", "source_update"):
+                        stats["cached_holds"] = stats.get("cached_holds", 0) + 1
                     continue
                 prior = wp.receipt(key) if wp else {}
                 # Legacy receipt is adopted server-side, without republishing old stories.
@@ -112,7 +114,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     continue
                 image = get_source_image(raw, policy, config.image_dir)
                 if not image:
-                    raise InsufficientSource("No eligible featured image (minimum 1200px wide)")
+                    raise InsufficientSource("No eligible featured image (minimum 600px wide and 400px high)")
                 # Limit paid model attempts, not deduplication, source updates or
                 # missing-image checks. All publication checks still apply.
                 attempted += 1

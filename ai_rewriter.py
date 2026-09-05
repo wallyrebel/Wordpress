@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v1"
+PROMPT_VERSION = "evidence-v2-time-format"
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -110,6 +110,13 @@ def fingerprint(title, content):
 def normalized(value):
     return " ".join(value.split()).casefold()
 
+def numeric_tokens(value):
+    # AP style omits :00 in whole-hour times. Accept that exact equivalence,
+    # while keeping nonzero minutes, quantities, dates and all other checks.
+    value = re.sub(r"\b(1[0-2]|0?[1-9]):00(?=\s*[ap]\.?m\.?(?:\b|\s|$))",
+                   lambda m: str(int(m.group(1))), value, flags=re.I)
+    return set(re.findall(r"\b\d+(?:[.,:/-]\d+)*(?:%|\b)", value))
+
 def _call(client, model, effort, schema, prompt, payload, max_tokens, usage):
     response = client.responses.parse(
         model=model, reasoning={"effort": effort}, store=False,
@@ -163,8 +170,7 @@ def rewrite_article(title, content, link, openai_client, *,
     combined = " ".join([draft.headline, draft.excerpt] + [p.text for p in draft.paragraphs])
     if len(combined.split()) > 650:
         raise ModelOutputError("Draft exceeds maximum length")
-    number_pattern = r"\b\d+(?:[.,:/-]\d+)*(?:%|\b)"
-    if set(re.findall(number_pattern, combined)) - set(re.findall(number_pattern, source)):
+    if numeric_tokens(combined) - numeric_tokens(source):
         raise ModelOutputError("Numeric tokens absent from source")
     sensitive = extraction.sensitive or bool(re.search(
         r"\b(arrest|charged|killed|death|died|murder|missing|alleg|election|medical|tornado|evacuat|correction)\w*\b",

@@ -2,6 +2,7 @@
 // Contract tests with WordPress API stubs. Actual site integration is a separate check.
 define('ABSPATH', __DIR__);
 $options = array(); $posts = array(); $next_id = 100; $inserts = 0;
+$image_dimensions = array('width'=>720, 'height'=>960);
 function add_action(...$args) {}
 function current_user_can(...$args) { return true; }
 function get_option($key,$default=false) { global $options; return $options[$key] ?? $default; }
@@ -15,7 +16,7 @@ function wp_strip_all_tags($value) { return strip_tags($value); }
 function absint($value) { return abs((int)$value); }
 function term_exists($id,$type) { return $id > 0; }
 function wp_attachment_is_image($id) { return $id === 3; }
-function wp_get_attachment_metadata($id) { return $id === 3 ? array('width'=>1600) : array(); }
+function wp_get_attachment_metadata($id) { global $image_dimensions; return $id === 3 ? $image_dimensions : array(); }
 function wp_json_encode($value) { return json_encode($value); }
 function wp_slash($value) { return $value; }
 class WP_Error {
@@ -64,6 +65,11 @@ check(is_wp_error(msn_article(new Request($p))) && $inserts===1,'draft creation 
 $p['status']='publish'; $p['review_reasons']=array('Needs review');
 check(is_wp_error(msn_article(new Request($p))) && $inserts===1,'failed checks block publication');
 $p['review_reasons']=array();
+$image_dimensions = array('width'=>300, 'height'=>200);
+check(is_wp_error(msn_article(new Request($p))) && $inserts===1,'small thumbnails still block publication');
+$image_dimensions = array('width'=>1200, 'height'=>100);
+check(is_wp_error(msn_article(new Request($p))) && $inserts===1,'banner-shaped images still block publication');
+$image_dimensions = array('width'=>720, 'height'=>960);
 add_option('msn_lock_'.$p['source_key'],'busy');
 $locked=msn_article(new Request($p));
 check(is_wp_error($locked) && $locked->code==='source_locked' && $inserts===1,'concurrent/abandoned lock fails closed');

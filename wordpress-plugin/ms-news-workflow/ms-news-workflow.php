@@ -2,7 +2,7 @@
 /**
  * Plugin Name: MS News Workflow
  * Description: Authenticated publishing receipts with required images and taxonomy.
- * Version: 1.0.0
+ * Version: 1.0.1
  */
 if (!defined('ABSPATH')) { exit; }
 
@@ -14,7 +14,7 @@ function msn_receipt($key) {
 add_action('rest_api_init', function () {
     register_rest_route('ms-news/v1', '/health', array(
         'methods' => 'GET', 'permission_callback' => 'msn_permission',
-        'callback' => function () { return array('version' => 1); }
+        'callback' => function () { return array('version' => 1, 'min_image_width' => 600, 'min_image_height' => 400); }
     ));
     register_rest_route('ms-news/v1', '/receipt/(?P<key>[a-f0-9]{64})', array(
         'methods' => 'GET', 'permission_callback' => 'msn_permission',
@@ -82,7 +82,8 @@ function msn_article($request) {
             }
             $media = isset($p['featured_media']) ? absint($p['featured_media']) : 0;
             $dimensions = wp_get_attachment_metadata($media);
-            if (!$media || !wp_attachment_is_image($media) || empty($dimensions['width']) || $dimensions['width'] < 1200) {
+            if (!$media || !wp_attachment_is_image($media) || empty($dimensions['width']) || empty($dimensions['height'])
+                || $dimensions['width'] < 600 || $dimensions['height'] < 400 || $dimensions['width'] / $dimensions['height'] > 3.5) {
                 return new WP_Error('bad_image', 'Invalid image.', array('status' => 400));
             }
             // From here failures keep the lock, preventing ambiguous writes being retried.
