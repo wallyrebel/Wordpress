@@ -37,7 +37,9 @@ def publication_status(article, policy, config, category_ids):
     return "hold"
 
 def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None):
-    stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0, "duplicates": 0}
+    stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0,
+             "duplicates": 0, "source_updates": 0, "model_attempts": 0,
+             "reasons": {}}
     store = Store(config.database_path) if not dry_run else None
     client = client or OpenAI(api_key=config.openai_api_key, timeout=90, max_retries=2)
     wp = wp or (None if dry_run else WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password))
@@ -70,9 +72,11 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 # Legacy receipt is adopted server-side, without republishing old stories.
                 legacy_id = store.legacy_post(entry.guid) if store and not prior.get("post_id") else None
                 if legacy_id:
-                    receipt = wp.upsert({"source_key": key, "content_hash": original_hash,
+                    entry = enrich_entry(entry, policy)
+                    digest = fingerprint(entry.title, entry.content)
+                    receipt = wp.upsert({"source_key": key, "content_hash": digest,
                         "source_url": entry.link, "adopt_post_id": legacy_id})
-                    store.save(key, original_hash, {**receipt, "feed_hash": original_hash})
+                    store.save(key, digest, {**receipt, "feed_hash": original_hash})
                     stats["duplicates"] += 1
                     continue
                 # Unknown reuse permissions create a local editorial queue, no model spend.
@@ -82,12 +86,6 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                          "feed_url": entry.feed_url, "title": entry.title})
                     stats["skipped"] += 1
                     continue
-                if attempted >= (limit or config.max_posts_per_run):
-                    break
-                if feed_attempts.get(entry.feed_url, 0) >= config.max_entries_per_feed:
-                    continue
-                attempted += 1
-                feed_attempts[entry.feed_url] = feed_attempts.get(entry.feed_url, 0) + 1
                 entry = enrich_entry(entry, policy)
                 digest = fingerprint(entry.title, entry.content)
                 if digest in prior.get("versions", {}):
@@ -97,13 +95,29 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     continue
                 if prior.get("post_id"):
                     stats["held"] += 1
+                    stats["source_updates"] += 1
                     write_json(Path(config.review_dir) / (key + ".json"),
                         {"status": "source_update", "source_url": entry.link,
                          "original_post_id": prior["post_id"], "source_text": clean_text(entry.content)})
+                    # Previously these same updates consumed every run's budget and
+                    # were never cached, permanently starving unpublished stories.
+                    if store:
+                        store.save(key, digest, {"status": "source_update",
+                            "post_id": prior["post_id"], "feed_hash": original_hash})
+                    continue
+                if attempted >= (limit or config.max_posts_per_run):
+                    stats["budget_reached"] = True
+                    break
+                if feed_attempts.get(entry.feed_url, 0) >= config.max_entries_per_feed:
                     continue
                 image = get_source_image(raw, policy, config.image_dir)
                 if not image:
                     raise InsufficientSource("No eligible featured image (minimum 1200px wide)")
+                # Limit paid model attempts, not deduplication, source updates or
+                # missing-image checks. All publication checks still apply.
+                attempted += 1
+                stats["model_attempts"] = attempted
+                feed_attempts[entry.feed_url] = feed_attempts.get(entry.feed_url, 0) + 1
                 article = rewrite_article(entry.title, entry.content, entry.link, client,
                     extraction_model=config.extraction_model, drafting_model=config.drafting_model,
                     publisher=policy.publisher,
@@ -153,6 +167,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 stats["created"] += 1
             except InsufficientSource as exc:
                 stats["skipped"] += 1
+                reason = str(exc)
+                stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
                 write_json(Path(config.review_dir) / (key + ".json"),
                     {"status": "insufficient_source", "source_url": entry.link, "reason": str(exc)})
                 # Rejections can be reconsidered when the source, image or prompt changes.
@@ -160,6 +176,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     store.save(key, original_hash, {"status":"held", "feed_hash":original_hash})
             except ModelOutputError as exc:
                 stats["held"] += 1
+                reason = str(exc)
+                stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
                 write_json(Path(config.review_dir) / (key + ".json"),
                     {"status":"validation_failed", "source_url":entry.link, "reason":str(exc)})
                 if store:

@@ -1,4 +1,5 @@
 import copy
+from dataclasses import replace
 import json
 import tempfile
 import unittest
@@ -246,6 +247,64 @@ class PublishingTests(unittest.TestCase):
         stats = self.run_flow()
         self.assertEqual(stats["held"],1)
         self.wp.upsert.assert_not_called()
+
+    def test_source_updates_cannot_starve_new_article(self):
+        from main import source_key
+        self.cfg.max_posts_per_run = 1
+        old = [replace(self.entry, guid=f"old-{i}", link=f"https://example.org/old-{i}")
+               for i in range(12)]
+        self.wp.receipt.side_effect = lambda key: ({} if key == source_key(self.entry)
+                                                   else {"post_id": 42, "versions": {}})
+        with patch("main.fetch_feeds_with_raw", return_value=[(e, {}) for e in old + [self.entry]]), \
+             patch("main.get_source_image", return_value=NewsImage("test.jpg", "Credit", "https://example.org/i.jpg")), \
+             patch("main.rewrite_article", return_value=self.article) as rewrite:
+            stats = run_feed_processing(self.cfg, client=Mock(), wp=self.wp)
+        self.assertEqual(stats["source_updates"], 12)
+        self.assertEqual(stats["model_attempts"], 1)
+        self.assertEqual(stats["created"], 1)
+        rewrite.assert_called_once()
+        self.wp.upsert.assert_called_once()
+
+    def test_unchanged_source_update_is_cached(self):
+        self.wp.receipt.return_value = {"post_id": 4, "versions": {}}
+        self.run_flow()
+        self.wp.receipt.reset_mock()
+        stats = self.run_flow()
+        self.assertEqual(stats["duplicates"], 1)
+        self.assertEqual(stats["source_updates"], 0)
+        self.wp.receipt.assert_not_called()
+        self.wp.upsert.assert_not_called()
+
+    def test_legacy_adoption_uses_content_hash_not_feed_metadata(self):
+        store = Store(self.cfg.database_path)
+        store.conn.execute("CREATE TABLE processed_entries(guid TEXT, post_id INTEGER)")
+        store.conn.execute("INSERT INTO processed_entries VALUES ('guid',42)")
+        store.conn.commit()
+        store.close()
+        self.run_flow()
+        digest = fingerprint(self.entry.title, self.entry.content)
+        payload = self.wp.upsert.call_args.args[0]
+        self.assertEqual(payload["content_hash"], digest)
+        self.assertEqual(payload["adopt_post_id"], 42)
+        self.wp.receipt.return_value = {"post_id": 42, "versions": {digest: {"post_id": 42}}}
+        self.wp.upsert.reset_mock()
+        with patch("main.fetch_feeds_with_raw", return_value=[(self.entry, {"summary": "new feed metadata"})]):
+            stats = run_feed_processing(self.cfg, client=Mock(), wp=self.wp)
+        self.assertEqual(stats["duplicates"], 1)
+        self.assertEqual(stats["held"], 0)
+        self.wp.upsert.assert_not_called()
+
+    def test_missing_images_do_not_exhaust_model_budget(self):
+        self.cfg.max_posts_per_run = 1
+        bad = replace(self.entry, guid="no-image", link="https://example.org/no-image")
+        with patch("main.fetch_feeds_with_raw", return_value=[(bad, {}), (self.entry, {})]), \
+             patch("main.get_source_image", side_effect=[None, NewsImage("test.jpg", "Credit", "https://example.org/i.jpg")]), \
+             patch("main.rewrite_article", return_value=self.article) as rewrite:
+            stats = run_feed_processing(self.cfg, client=Mock(), wp=self.wp)
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(stats["skipped"], 1)
+        self.assertEqual(stats["model_attempts"], 1)
+        rewrite.assert_called_once()
 
     def test_dry_run_no_wordpress_or_database(self):
         stats = self.run_flow(dry_run=True)

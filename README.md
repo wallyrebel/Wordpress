@@ -65,6 +65,7 @@ Tags are limited to up to five names of people, organizations and places that oc
 - A source update is held locally with the original post ID. It never silently overwrites an editor's changes or creates a draft.
 - The old SQLite `processed_entries` table is preserved. Existing GUID/post pairs are adopted into server receipts without republishing.
 - Held items are cached until their source/image input or prompt changes, reducing repeat API charges.
+- Existing-post updates are cached and do not consume the model-attempt budget. Legacy adoption records the source content hash, so rotating feed metadata does not become a false article correction. Missing-image checks also do not consume paid model attempts; run summaries include rejection reasons.
 - Image upload failures, API failures and failed checks never fall through to publication.
 - The Actions schedule runs every 15 minutes, offset from the hour. A concurrency group prevents overlap; the job has a 20-minute limit. Partial feed failures produce a failing run instead of a misleading green success.
 - Dependencies are locked; CI runs Python regression tests plus PHP syntax and companion contract tests.
