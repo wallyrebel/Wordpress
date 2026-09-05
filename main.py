@@ -1,353 +1,212 @@
 #!/usr/bin/env python3
-"""
-RSS to WordPress Automation Script.
-Monitors RSS feeds and publishes AP-style articles to WordPress.
-"""
-
+"""Nano extraction -> Luna drafting -> Nano verification -> WordPress receipt."""
 import argparse
+import hashlib
+import html
+import json
 import logging
 import os
 import sys
 import time
-from datetime import datetime
-from typing import Optional, List
-
+from dataclasses import asdict, replace
+from pathlib import Path
 from openai import OpenAI
-
-from config import Config, load_config
-from database import init_db, is_processed, mark_processed, get_processed_count
-from feed_parser import fetch_feeds_with_raw, FeedEntry
-from image_handler import get_or_create_image
-from ai_rewriter import rewrite_article, RewrittenArticle
+from ai_rewriter import rewrite_article, fingerprint, clean_text, InsufficientSource, ModelOutputError, PROMPT_VERSION
+from config import load_config
+from database import Store
+from feed_parser import fetch_feeds_with_raw, enrich_entry
+from image_handler import get_source_image
 from wordpress_api import WordPressAPI
-from email_notifier import PublishedArticle, send_github_actions_notification
 
+logger = logging.getLogger(__name__)
 
-# Configure logging
-def setup_logging(verbose: bool = False):
-    """Configure structured logging."""
-    level = logging.DEBUG if verbose else logging.INFO
-    
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler('rss_automation.log', encoding='utf-8')
-        ]
-    )
-    
-    # Reduce noise from third-party libraries
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    logging.getLogger('openai').setLevel(logging.WARNING)
-    
-    return logging.getLogger(__name__)
+def write_json(path, data):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp.replace(path)
 
+def source_key(entry):
+    return hashlib.sha256(entry.link.encode()).hexdigest()
 
-def process_single_entry(
-    entry: FeedEntry,
-    raw_entry: dict,
-    config: Config,
-    openai_client: OpenAI,
-    wp_api: WordPressAPI,
-    logger: logging.Logger
-) -> Optional[int]:
-    """
-    Process a single feed entry: rewrite, get image, and publish.
-    
-    Args:
-        entry: Parsed feed entry.
-        raw_entry: Raw entry data for image extraction.
-        config: Application configuration.
-        openai_client: Initialized OpenAI client.
-        wp_api: WordPress API client.
-        logger: Logger instance.
-        
-    Returns:
-        WordPress post ID if successful, None otherwise.
-    """
-    logger.info(f"Processing entry: {entry.title[:60]}...")
-    
+def publication_status(article, policy, config, category_ids):
+    if (config.publish_mode == "auto" and policy.auto_publish and policy.reuse_allowed
+            and policy.publisher and not article.requires_review and category_ids):
+        return "publish"
+    return "hold"
+
+def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None):
+    stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0, "duplicates": 0}
+    store = Store(config.database_path) if not dry_run else None
+    client = client or OpenAI(api_key=config.openai_api_key, timeout=90, max_retries=2)
+    wp = wp or (None if dry_run else WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password))
     try:
-        # Step 1: Rewrite article with AI
-        rewritten = rewrite_article(
-            title=entry.title,
-            content=entry.content,
-            link=entry.link,
-            openai_client=openai_client
-        )
-        
-        if not rewritten:
-            logger.error(f"Failed to rewrite article: {entry.title}")
-            return None
-        
-        logger.info(f"Article rewritten: {rewritten.headline[:50]}...")
-        
-        # Step 2: Get or generate image
-        image_path = get_or_create_image(
-            raw_entry=raw_entry,
-            title=entry.title,
-            content=entry.content,
-            image_dir=config.image_dir
-        )
-        
-        if not image_path:
-            logger.warning(f"No image available for: {entry.title}")
-        
-        # Step 3: Get/create category and tags
-        category_ids, tag_ids = wp_api.get_category_and_tag_ids(
-            category=rewritten.category,
-            tags=rewritten.tags
-        )
-        
-        logger.info(f"Categories: {category_ids}, Tags: {tag_ids}")
-        
-        # Step 4: Upload image to WordPress
-        media_id = None
-        if image_path:
-            media_id = wp_api.upload_media(
-                file_path=image_path,
-                alt_text=rewritten.headline,
-                caption=f"Image for: {rewritten.headline}"
-            )
-            if media_id:
-                logger.info(f"Uploaded media ID: {media_id}")
-            else:
-                logger.warning("Failed to upload media, continuing without featured image")
-        
-        # Step 5: Create WordPress post
-        post_id = wp_api.create_post(
-            title=rewritten.headline,
-            content=rewritten.body,
-            status="publish",
-            category_ids=category_ids,
-            tag_ids=tag_ids,
-            featured_media_id=media_id
-        )
-        
-        if post_id:
-            logger.info(f"Successfully created post ID: {post_id}")
-            return post_id
-        else:
-            logger.error(f"Failed to create post for: {entry.title}")
-            return None
-            
-    except Exception as e:
-        logger.exception(f"Error processing entry {entry.title}: {e}")
-        return None
-
-
-def run_feed_processing(config: Config, logger: logging.Logger) -> tuple[int, int, List[PublishedArticle]]:
-    """
-    Run a single iteration of feed processing.
-    
-    Args:
-        config: Application configuration.
-        logger: Logger instance.
-        
-    Returns:
-        Tuple of (processed_count, error_count, published_articles).
-    """
-    logger.info("=" * 60)
-    logger.info(f"Starting feed processing at {datetime.now().isoformat()}")
-    logger.info(f"Monitoring {len(config.rss_feeds)} RSS feed(s)")
-    
-    published_articles: List[PublishedArticle] = []
-    
-    # Initialize OpenAI client
-    openai_client = OpenAI(api_key=config.openai_api_key)
-    
-    # Initialize WordPress API
-    wp_api = WordPressAPI(
-        wp_url=config.wp_url,
-        username=config.wp_username,
-        app_password=config.wp_app_password
-    )
-    
-    # Test WordPress connection
-    if not wp_api.test_connection():
-        logger.error("Failed to connect to WordPress. Check your credentials.")
-        return 0, 1, []
-    
-    # Fetch all feeds
-    # Filter for last 24 hours to prevent backfilling old content
-    entries_with_raw = fetch_feeds_with_raw(config.rss_feeds, max_age_hours=24)
-    logger.info(f"Fetched {len(entries_with_raw)} total entries from all feeds (last 24h)")
-    
-    # Filter out already processed entries
-    new_entries = []
-    for entry, raw in entries_with_raw:
-        if not is_processed(entry.guid):
-            new_entries.append((entry, raw))
-        else:
-            logger.debug(f"Skipping already processed: {entry.guid}")
-    
-    logger.info(f"Found {len(new_entries)} new entries to process")
-    
-    if not new_entries:
-        logger.info("No new entries to process")
-        return 0, 0, []
-    
-    processed_count = 0
-    error_count = 0
-    
-    for entry, raw_entry in new_entries:
-        try:
-            post_id = process_single_entry(
-                entry=entry,
-                raw_entry=raw_entry,
-                config=config,
-                openai_client=openai_client,
-                wp_api=wp_api,
-                logger=logger
-            )
-            
-            if post_id:
-                mark_processed(
-                    guid=entry.guid,
-                    post_id=post_id,
-                    feed_url=entry.feed_url,
-                    title=entry.title
-                )
-                processed_count += 1
-                
-                # Track for email notification
-                wp_post_url = f"{config.wp_url}/?p={post_id}"
-                published_articles.append(PublishedArticle(
-                    headline=entry.title[:100],
-                    source_url=entry.link,
-                    wordpress_url=wp_post_url,
-                    post_id=post_id
-                ))
-            else:
-                error_count += 1
-                
-        except Exception as e:
-            logger.exception(f"Unexpected error processing {entry.guid}: {e}")
-            error_count += 1
-        
-        # Brief pause between entries to avoid rate limiting
-        time.sleep(2)
-    
-    logger.info(f"Processing complete. Processed: {processed_count}, Errors: {error_count}")
-    logger.info(f"Total entries in database: {get_processed_count()}")
-    
-    return processed_count, error_count, published_articles
-
+        if wp:
+            wp.test_connection()  # Fail before model spending if companion is missing.
+        entries = fetch_feeds_with_raw(config.rss_feeds, config.max_entries_per_feed,
+                                       config.max_age_hours, stats)
+        seen = set()
+        attempted = 0
+        feed_attempts = {}
+        for entry, raw in entries:
+            key = source_key(entry)
+            if key in seen:
+                continue
+            seen.add(key)
+            policy = config.policy(entry.feed_url)
+            policy = replace(policy, publisher=policy.publisher or entry.publisher,
+                image_credit=policy.image_credit or ("Source: " + (policy.publisher or entry.publisher)))
+            original_hash = fingerprint(entry.title, entry.content + json.dumps(raw, sort_keys=True, default=str)
+                + PROMPT_VERSION + config.extraction_model + config.drafting_model
+                + json.dumps(asdict(policy), sort_keys=True) + json.dumps(config.category_ids, sort_keys=True))
+            prior = {}
+            try:
+                cached = store.get(key) if store else None
+                if cached and cached.get("feed_hash") == original_hash:
+                    stats["duplicates"] += 1
+                    continue
+                prior = wp.receipt(key) if wp else {}
+                # Legacy receipt is adopted server-side, without republishing old stories.
+                legacy_id = store.legacy_post(entry.guid) if store and not prior.get("post_id") else None
+                if legacy_id:
+                    receipt = wp.upsert({"source_key": key, "content_hash": original_hash,
+                        "source_url": entry.link, "adopt_post_id": legacy_id})
+                    store.save(key, original_hash, {**receipt, "feed_hash": original_hash})
+                    stats["duplicates"] += 1
+                    continue
+                # Unknown reuse permissions create a local editorial queue, no model spend.
+                if not policy.reuse_allowed:
+                    write_json(Path(config.review_dir) / (key + ".json"),
+                        {"status": "source_policy_needed", "source_url": entry.link,
+                         "feed_url": entry.feed_url, "title": entry.title})
+                    stats["skipped"] += 1
+                    continue
+                if attempted >= (limit or config.max_posts_per_run):
+                    break
+                if feed_attempts.get(entry.feed_url, 0) >= config.max_entries_per_feed:
+                    continue
+                attempted += 1
+                feed_attempts[entry.feed_url] = feed_attempts.get(entry.feed_url, 0) + 1
+                entry = enrich_entry(entry, policy)
+                digest = fingerprint(entry.title, entry.content)
+                if digest in prior.get("versions", {}):
+                    if store:
+                        store.save(key, digest, {**prior["versions"][digest], "feed_hash": original_hash})
+                    stats["duplicates"] += 1
+                    continue
+                if prior.get("post_id"):
+                    stats["held"] += 1
+                    write_json(Path(config.review_dir) / (key + ".json"),
+                        {"status": "source_update", "source_url": entry.link,
+                         "original_post_id": prior["post_id"], "source_text": clean_text(entry.content)})
+                    continue
+                image = get_source_image(raw, policy, config.image_dir)
+                if not image:
+                    raise InsufficientSource("No eligible featured image (minimum 1200px wide)")
+                article = rewrite_article(entry.title, entry.content, entry.link, client,
+                    extraction_model=config.extraction_model, drafting_model=config.drafting_model,
+                    publisher=policy.publisher,
+                    source_date=(entry.published or entry.updated).isoformat())
+                record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
+                          "content_hash": digest, "source_text": clean_text(entry.content),
+                          "article": asdict(article)}
+                write_json(Path(config.review_dir) / (key + ".json"), record)
+                if dry_run:
+                    stats["previews"] += 1
+                    continue
+                if article.requires_review or not policy.auto_publish:
+                    record["status"] = "held"
+                    record["reasons"] = article.review_reasons or ["Source not enabled for automatic publishing"]
+                    write_json(Path(config.review_dir) / (key + ".json"), record)
+                    if store:
+                        store.save(key, digest, {"status":"held", "feed_hash":original_hash})
+                    stats["held"] += 1
+                    continue
+                category_ids, tag_ids = wp.taxonomy(article.category, article.tags, config.category_ids)
+                status = publication_status(article, policy, config, category_ids)
+                if status != "publish" or not tag_ids:
+                    record["status"] = "held"
+                    record["reasons"] = article.review_reasons + ([] if category_ids else ["Category mapping needed"]) + ([] if tag_ids else ["No supported tags"])
+                    write_json(Path(config.review_dir) / (key + ".json"), record)
+                    if store:
+                        store.save(key, digest, {"status":"held", "feed_hash":original_hash})
+                    stats["held"] += 1
+                    continue
+                media_id = wp.upload_media(image, article.headline)
+                if not media_id:
+                    raise ValueError("Featured image upload failed")
+                publisher = policy.publisher or "original source"
+                source_line = '<p class="news-source">Source: <a href="' + html.escape(
+                    entry.link, quote=True) + '">' + html.escape(publisher) + "</a>.</p>"
+                receipt = wp.upsert({
+                    "source_key": key, "content_hash": digest, "source_url": entry.link,
+                    "title": article.headline, "content": article.body + source_line,
+                    "excerpt": article.excerpt, "status": status,
+                    "categories": category_ids, "tags": tag_ids, "featured_media": media_id,
+                    "review_reasons": article.review_reasons + ([] if category_ids else ["Category mapping needed"]),
+                    "source_published": (entry.published or entry.updated).isoformat(),
+                    "evidence": article.evidence})
+                store.save(key, digest, {**receipt, "feed_hash": original_hash})
+                record["status"], record["receipt"] = receipt["status"], receipt
+                write_json(Path(config.review_dir) / (key + ".json"), record)
+                stats["created"] += 1
+            except InsufficientSource as exc:
+                stats["skipped"] += 1
+                write_json(Path(config.review_dir) / (key + ".json"),
+                    {"status": "insufficient_source", "source_url": entry.link, "reason": str(exc)})
+                # Rejections can be reconsidered when the source, image or prompt changes.
+                if store:
+                    store.save(key, original_hash, {"status":"held", "feed_hash":original_hash})
+            except ModelOutputError as exc:
+                stats["held"] += 1
+                write_json(Path(config.review_dir) / (key + ".json"),
+                    {"status":"validation_failed", "source_url":entry.link, "reason":str(exc)})
+                if store:
+                    store.save(key, original_hash, {"status":"held", "feed_hash":original_hash})
+            except Exception as exc:
+                stats["errors"] += 1
+                # Never include HTTP request objects/headers or keys in logs.
+                logger.error("Item held; source=%s error=%s", key[:12], type(exc).__name__)
+                write_json(Path(config.review_dir) / (key + ".json"),
+                    {"status": "error", "source_url": entry.link, "error_type": type(exc).__name__})
+        if stats.get("feeds_failed"):
+            stats["errors"] += stats["feeds_failed"]
+        return stats
+    finally:
+        if store:
+            store.close()
+        write_json(Path(config.review_dir) / "run-summary.json", stats)
+        logger.info("Run summary: %s", json.dumps(stats))
 
 def main():
-    """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description='RSS to WordPress Automation - Monitor RSS feeds and publish AP-style articles'
-    )
-    parser.add_argument(
-        '--schedule',
-        action='store_true',
-        help='Run continuously with periodic polling (uses POLL_INTERVAL_MINUTES from config)'
-    )
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Enable verbose/debug logging'
-    )
-    parser.add_argument(
-        '--test-connection',
-        action='store_true',
-        help='Test WordPress connection and exit'
-    )
-    
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dry-run", action="store_true", help="Model calls and local previews only; no WP/DB writes")
+    parser.add_argument("--max-items", type=int)
+    parser.add_argument("--schedule", action="store_true")
+    parser.add_argument("--test-connection", action="store_true")
     args = parser.parse_args()
-    
-    # Setup logging
-    logger = setup_logging(verbose=args.verbose)
-    
-    logger.info("RSS to WordPress Automation starting...")
-    
-    # Email notification settings from environment
-    notify_email = os.getenv('NOTIFY_EMAIL')
-    smtp_username = os.getenv('SMTP_USERNAME')
-    smtp_password = os.getenv('SMTP_PASSWORD')
-    email_enabled = all([notify_email, smtp_username, smtp_password])
-    
-    if email_enabled:
-        logger.info(f"Email notifications enabled. Will notify: {notify_email}")
-    else:
-        logger.info("Email notifications disabled (missing NOTIFY_EMAIL, SMTP_USERNAME, or SMTP_PASSWORD)")
-    
+    if args.max_items is not None and args.max_items < 1:
+        parser.error("--max-items must be positive")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+                        handlers=[logging.StreamHandler(), logging.FileHandler("rss_automation.log", encoding="utf-8")])
+    for name in ("openai", "httpx", "httpcore", "urllib3"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     try:
-        # Load configuration
-        config = load_config()
-        logger.info(f"Configuration loaded. Feeds: {len(config.rss_feeds)} RSS feeds")
-        
-        # Initialize database
-        init_db(config.database_path)
-        logger.info(f"Database initialized. Existing entries: {get_processed_count()}")
-        
-        # Test connection mode
+        config = load_config(require_wp=not args.dry_run)
         if args.test_connection:
-            wp_api = WordPressAPI(
-                wp_url=config.wp_url,
-                username=config.wp_username,
-                app_password=config.wp_app_password
-            )
-            if wp_api.test_connection():
-                logger.info("WordPress connection test PASSED")
-                sys.exit(0)
-            else:
-                logger.error("WordPress connection test FAILED")
-                sys.exit(1)
-        
-        # Run processing
-        if args.schedule:
-            logger.info(f"Running in scheduled mode. Polling every {config.poll_interval_minutes} minutes.")
-            logger.info("Press Ctrl+C to stop.")
-            
-            while True:
-                try:
-                    processed, errors, published = run_feed_processing(config, logger)
-                    
-                    # Send email notification if articles were published
-                    if email_enabled and published:
-                        send_github_actions_notification(
-                            articles=published,
-                            to_email=notify_email,
-                            smtp_username=smtp_username,
-                            smtp_password=smtp_password
-                        )
-                    
-                    logger.info(f"Sleeping for {config.poll_interval_minutes} minutes...")
-                    time.sleep(config.poll_interval_minutes * 60)
-                except KeyboardInterrupt:
-                    logger.info("Received interrupt signal. Shutting down...")
-                    break
-        else:
-            # Single run
-            processed, errors, published = run_feed_processing(config, logger)
-            
-            # Send email notification if articles were published
-            if email_enabled and published:
-                send_github_actions_notification(
-                    articles=published,
-                    to_email=notify_email,
-                    smtp_username=smtp_username,
-                    smtp_password=smtp_password
-                )
-            
-            if errors > 0 and processed == 0:
-                sys.exit(1)
-    
-    except ValueError as e:
-        logger.error(f"Configuration error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        logger.exception(f"Fatal error: {e}")
-        sys.exit(1)
-    
-    logger.info("RSS to WordPress Automation finished.")
+            WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password).test_connection()
+            return 0
+        while True:
+            stats = run_feed_processing(config, args.dry_run, args.max_items)
+            if not args.schedule:
+                return 1 if stats["errors"] else 0
+            time.sleep(config.poll_interval_minutes * 60)
+    except KeyboardInterrupt:
+        return 0
+    except Exception as exc:
+        logger.error("Run stopped: %s", type(exc).__name__)
+        return 1
 
-
-if __name__ == '__main__':
-    main()
-
+if __name__ == "__main__":
+    sys.exit(main())

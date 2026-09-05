@@ -25,3 +25,8 @@ images/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local editorial records and live evaluation results
+review/
+*.db-shm
+*.db-wal

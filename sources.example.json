@@ -1,0 +1,11 @@
+{
+  "https://example.org/feed/": {
+    "publisher": "Example Mississippi publisher",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": true,
+    "article_hosts": ["example.org", "www.example.org"],
+    "image_reuse_allowed": true,
+    "image_credit": "Courtesy of Example Mississippi publisher"
+  }
+}
