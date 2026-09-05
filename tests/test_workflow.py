@@ -61,6 +61,54 @@ class RewriterTests(unittest.TestCase):
             rewrite_article("Sale", SOURCE, "https://example.org", client)
         self.assertEqual(client.responses.parse.call_count, 1)
 
+    def test_wrapped_exact_evidence_is_accepted(self):
+        for opening, closing in [('"', '"'), ('“', '”'), ("'", "'"), ('‘', '’')]:
+            with self.subTest(opening=opening):
+                extraction = packet()
+                original = extraction.facts[0].evidence
+                extraction.facts[0].evidence = opening + original + closing
+                result = rewrite_article("Sale", SOURCE, "https://example.org", fake_client(extraction))
+                self.assertEqual(result.evidence["extraction"]["facts"][0]["evidence"], original)
+
+    def test_wrapped_invented_evidence_is_still_rejected(self):
+        extraction = packet()
+        extraction.facts[0].evidence = '"The library received a million dollar donation"'
+        client = fake_client(extraction)
+        with self.assertRaisesRegex(ModelOutputError, "Evidence quotation absent"):
+            rewrite_article("Sale", SOURCE, "https://example.org", client)
+        self.assertEqual(client.responses.parse.call_count, 1)
+
+    def test_direct_quote_preserves_exact_source_wording(self):
+        generated = draft()
+        generated.paragraphs[0].text = 'The sale "is open to the public", the library announced.'
+        result = rewrite_article("Sale", SOURCE, "https://example.org", fake_client(generated=generated))
+        self.assertIn('&quot;is open to the public&quot;', result.body)
+
+    def test_altered_direct_quote_rejected_before_verification(self):
+        for opening, closing in [('"', '"'), ('“', '”')]:
+            generated = draft()
+            generated.paragraphs[0].text = 'The sale ' + opening + 'is free for all visitors' + closing + ', the library announced.'
+            client = fake_client(generated=generated)
+            with self.assertRaisesRegex(ModelOutputError, "Direct quotation differs"):
+                rewrite_article("Sale", SOURCE, "https://example.org", client)
+            self.assertEqual(client.responses.parse.call_count, 2)
+
+    def test_original_source_is_available_to_writer_for_quotes(self):
+        client = fake_client()
+        rewrite_article("Sale", SOURCE, "https://example.org", client)
+        payload = json.loads(client.responses.parse.call_args_list[1].kwargs["input"][1]["content"])
+        self.assertEqual(payload["source_text"], SOURCE)
+
+    def test_writer_and_verifier_share_source_attribution(self):
+        client = fake_client()
+        url = "https://www.facebook.com/library/posts/123"
+        rewrite_article("Sale", SOURCE, url, client, publisher="Tupelo Library on Facebook")
+        for call in client.responses.parse.call_args_list[1:]:
+            payload = json.loads(call.kwargs["input"][1]["content"])
+            self.assertEqual(payload["source_url"], url)
+            self.assertEqual(payload["publisher"], "Tupelo Library on Facebook")
+            self.assertEqual(payload["source_text"], SOURCE)
+
     def test_insufficient_stops_after_extraction(self):
         extraction = packet()
         extraction.facts = []

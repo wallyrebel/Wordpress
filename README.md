@@ -6,7 +6,8 @@ It publishes automatically only when every requirement passes:
 
 - A current, dated source from your configured feed list.
 - Mississippi relevance and concrete, source-supported facts.
-- Evidence quotations that actually occur in the source.
+- Evidence quotations that actually occur in the source. Extra wrapping quotation marks are removed only when the enclosed excerpt matches the source.
+- Story text is summarized; any direct quotations retain exact source wording and attribution. Altered quotations are blocked. The writer and verifier receive the same source URL and publisher.
 - A headline, excerpt and body that pass structure, numeric and factual checks.
 - No unresolved factual issues. Sensitive subjects receive a stronger verification pass and can publish when they pass. Source corrections are held locally.
 - A decoded, usable featured image at least 600 pixels wide and 400 pixels high; 1,200-pixel sources are preferred when supplied. Images are never enlarged to pass validation.
