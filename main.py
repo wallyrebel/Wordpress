@@ -123,7 +123,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 article = rewrite_article(entry.title, entry.content, entry.link, client,
                     extraction_model=config.extraction_model, drafting_model=config.drafting_model,
                     publisher=policy.publisher,
-                    source_date=(entry.published or entry.updated).isoformat())
+                    source_date=(entry.published or entry.updated).isoformat(),
+                    approved_primary_source=policy.reuse_allowed and policy.auto_publish)
                 record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
                           "content_hash": digest, "source_text": clean_text(entry.content),
                           "article": asdict(article)}

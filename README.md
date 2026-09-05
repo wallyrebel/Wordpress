@@ -2,6 +2,8 @@
 
 This workflow uses **GPT-5 Nano** to extract source-backed facts, **GPT-5.6 Luna** to write the article, and **GPT-5 Nano** to check the draft against the original source.
 
+The publisher has approved all configured RSS feeds as factual, first-person sources for rewriting and quoting. Enabled feeds do not require separate source approval, independent corroboration, or an explicit Mississippi mention in every entry. Verification checks the rewrite against the source account; factual fidelity, exact quotations, attribution, images and taxonomy remain required.
+
 It publishes automatically only when every requirement passes:
 
 - A current, dated source from your configured feed list.

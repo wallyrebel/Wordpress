@@ -36,6 +36,29 @@ def fake_client(extraction=None, generated=None, verification=None):
     return client
 
 class RewriterTests(unittest.TestCase):
+    def test_approved_feed_does_not_need_explicit_mississippi_mention(self):
+        extraction = packet()
+        extraction.mississippi_relevant = False
+        client = fake_client(extraction)
+        result = rewrite_article("Sale", SOURCE, "https://example.org", client,
+                                 approved_primary_source=True)
+        self.assertFalse(result.requires_review)
+        verification = json.loads(client.responses.parse.call_args.kwargs["input"][1]["content"])
+        self.assertTrue(verification["approved_primary_source"])
+
+    def test_unapproved_source_still_needs_relevance(self):
+        extraction = packet()
+        extraction.mississippi_relevant = False
+        with self.assertRaises(InsufficientSource):
+            rewrite_article("Sale", SOURCE, "https://example.org", fake_client(extraction))
+
+    def test_approved_feed_still_cannot_invent_facts(self):
+        extraction = packet()
+        extraction.facts[0].evidence = "The library received a million dollar donation"
+        with self.assertRaises(ModelOutputError):
+            rewrite_article("Sale", SOURCE, "https://example.org", fake_client(extraction),
+                            approved_primary_source=True)
+
     def test_model_routing_and_output(self):
         client = fake_client()
         result = rewrite_article("Library sale", SOURCE, "https://example.org/story", client)
@@ -255,6 +278,13 @@ class PublishingTests(unittest.TestCase):
         self.assertEqual(payload["featured_media"],3)
         self.assertIn('class="news-source"',payload["content"])
         self.assertEqual(stats["created"],1)
+
+    def test_configured_feed_passes_primary_source_approval(self):
+        with patch("main.fetch_feeds_with_raw", return_value=[(self.entry, {})]), \
+             patch("main.get_source_image", return_value=NewsImage("test.jpg", "Credit", "https://example.org/i.jpg")), \
+             patch("main.rewrite_article", return_value=self.article) as rewrite:
+            run_feed_processing(self.cfg, client=Mock(), wp=self.wp)
+        self.assertTrue(rewrite.call_args.kwargs["approved_primary_source"])
 
     def test_no_image_no_post(self):
         self.run_flow(image=False)
