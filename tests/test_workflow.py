@@ -119,6 +119,17 @@ class RewriterTests(unittest.TestCase):
         with self.assertRaises(ModelOutputError):
             rewrite_article("Sale", SOURCE, "https://example.org", fake_client(generated=generated))
 
+    def test_internal_fact_markers_are_not_published(self):
+        generated = draft()
+        generated.paragraphs[0].text += " [f1][f2]"
+        client = fake_client(generated=generated)
+        result = rewrite_article("Sale", SOURCE, "https://example.org", client)
+        self.assertNotIn("[f1]", result.body)
+        self.assertNotIn("[f2]", result.body)
+        checked = json.loads(client.responses.parse.call_args.kwargs["input"][1]["content"])
+        self.assertNotIn("[f1]", checked["draft"]["paragraphs"][0]["text"])
+        self.assertEqual(checked["draft"]["paragraphs"][0]["fact_ids"], ["f1", "f2"])
+
 class FeedTests(unittest.TestCase):
     def test_url_dedupe(self):
         self.assertEqual(canonical_url("https://EXAMPLE.org/story?utm_source=x&id=5#top"),
