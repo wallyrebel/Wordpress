@@ -4,6 +4,8 @@ This workflow uses **GPT-5 Nano** to extract source-backed facts, **GPT-5.6 Luna
 
 The publisher has approved all configured RSS feeds as factual, first-person sources for rewriting and quoting. Enabled feeds do not require separate source approval, independent corroboration, or an explicit Mississippi mention in every entry. Verification checks the rewrite against the source account; factual fidelity, exact quotations, attribution, images and taxonomy remain required.
 
+Article length: aim for 300–500 body words when the source supports a full article. Extract and cover all useful material details from substantial reports. Short notices can remain shorter; do not add repetition, invented context or stretched quotations to meet a word count. This is an editorial target, not a Google minimum or a publication gate. The existing maximum length and factual checks still apply.
+
 It publishes automatically only when every requirement passes:
 
 - A current, dated source from your configured feed list.
