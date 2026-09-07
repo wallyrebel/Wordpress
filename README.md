@@ -71,19 +71,22 @@ Tags are limited to up to five names of people, organizations and places that oc
 - Receipt retries return the existing post even after the local cache is lost.
 - A source update is held locally with the original post ID. It never silently overwrites an editor's changes or creates a draft.
 - The old SQLite `processed_entries` table is preserved. Existing GUID/post pairs are adopted into server receipts without republishing.
-- Held items are cached until their source/image input or prompt changes, reducing repeat API charges.
+- Validation failures get one correction attempt using the failure reason and original evidence; every attempt repeats all factual, numeric and quotation checks. Both attempts count toward the existing run/per-feed model budgets. If that budget is exhausted, the second attempt resumes next run. After two failed attempts for an unchanged input, the item stays held and its reason remains visible without repeated model charges.
+- A missing/temporarily unavailable source image is checked up to three times, at least 30 minutes apart, before staying held. Image checks do not spend model tokens. Changed source/image input, prompts, models or policy can reopen a held item.
+- Eligible entries across all feeds are processed oldest first, rather than always favoring the top of `feeds.txt`. Items beyond the model budget are explicitly reported as deferred for the next run. The freshness window still applies: deferred items must remain available in the feed and within `MAX_AGE_HOURS` (24 by default). Persistent deferrals call for reviewing throughput or the window.
+- Approved-source text has no arbitrary minimum word count. Even a short complete notice goes through extraction and verification; empty text, placeholders and unsupported expansions cannot publish.
 - Existing-post updates are cached and do not consume the model-attempt budget. Legacy adoption records the source content hash, so rotating feed metadata does not become a false article correction. Missing-image checks also do not consume paid model attempts; run summaries include rejection reasons.
 - Image upload failures, API failures and failed checks never fall through to publication.
 - The Actions schedule runs every 15 minutes, offset from the hour. A concurrency group prevents overlap; the job has a 20-minute limit. Partial feed failures produce a failing run instead of a misleading green success.
 - Dependencies are locked; CI runs Python regression tests plus PHP syntax and companion contract tests.
-- Logs, evidence records and a run summary are retained as artifacts for 14 days. No credentials are written to them.
+- Logs, evidence records and a run summary are retained as artifacts for 14 days. Every run lists each configured feed, its read status, eligible/old/invalid counts and publication outcomes. Held and deferred items also produce a GitHub warning and a readable job summary, including holds restored from the database cache. No credentials are written to them.
 - Email sending was removed from the processing path. The old email helper remains as an unused historical module. Use GitHub Actions notification settings for run failures.
 
 A workflow cannot alert when GitHub stops scheduling it entirely. An independent uptime/heartbeat monitor is still needed for that failure mode. This implementation does not claim to solve Google scheduler outages.
 
 ## Review and recovery
 
-`review/<source-key>.json` records the reason for held or rejected items, or the article/evidence after publication. `review/run-summary.json` provides counts. Review records contain source text and should be treated as editorial working files; they are gitignored.
+`review/<source-key>.json` records the reason for held or rejected items, or the article/evidence after publication. `review/run-summary.json` provides counts and per-feed coverage; `review/run-items.json` lists every eligible source item's outcome. `python scripts/run_report.py` creates `review/run-report.md` and appends it to the GitHub job summary when run in Actions. Cached holds remain visible even when only the database was restored. Review records contain source text and should be treated as editorial working files; they are gitignored.
 
 A companion lock deliberately does not expire automatically: a timed-out client could still have a live server operation. If `source_locked` persists, an administrator should inspect the original post, the `_msn_source_key` and `_msn_content_hash` metadata, and the `msn_receipt_<key>` option before clearing `msn_lock_<key>`. If a post exists but its receipt was not saved, repair the receipt first. Blindly deleting locks can reintroduce duplicate publication.
 

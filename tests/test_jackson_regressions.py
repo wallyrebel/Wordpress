@@ -65,9 +65,29 @@ class JacksonRegressions(unittest.TestCase):
                             approved_primary_source=True)
 
     def test_unapproved_short_source_and_empty_source_still_rejected(self):
-        for text, approved in ((BRIEF, False), ('', True), ('Photos from Jackson Police Department', True)):
+        for text, approved in ((BRIEF, False), ('', True)):
             client = Mock()
             with self.assertRaises(InsufficientSource):
                 rewrite_article('Headline', text, 'https://example.org', client,
                                 approved_primary_source=approved)
             client.responses.parse.assert_not_called()
+
+    def test_very_short_factual_notice_can_publish_but_placeholder_cannot(self):
+        source = 'Tupelo Library closes Monday for repairs.'
+        extraction = Extraction(mississippi_relevant=True, sensitive=False,
+            category='Community', entities=['Tupelo Library'],
+            facts=[Fact(id='f1', statement=source, evidence=source)])
+        generated = Draft(headline='Tupelo Library closes Monday for repairs',
+            headline_fact_ids=['f1'], excerpt=source,
+            paragraphs=[Paragraph(text=source, fact_ids=['f1'])])
+        client = fake_client(extraction, generated)
+        article = rewrite_article('Notice', source, 'https://example.org', client,
+                                  approved_primary_source=True)
+        self.assertFalse(article.requires_review)
+        self.assertEqual(client.responses.parse.call_count, 3)
+        extraction.facts = []
+        client = fake_client(extraction)
+        with self.assertRaisesRegex(InsufficientSource, 'Missing central facts'):
+            rewrite_article('Photos', 'Photos from Tupelo Library', 'https://example.org',
+                            client, approved_primary_source=True)
+        self.assertEqual(client.responses.parse.call_count, 1)

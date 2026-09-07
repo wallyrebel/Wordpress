@@ -63,6 +63,9 @@ jobs:
         with:
           path: processed.db
           key: processed-db-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Show feed coverage and held-item reasons
+        if: always()
+        run: python scripts/run_report.py
       - name: Upload review queue and run summary
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,12 +75,3 @@ jobs:
             review/
             rss_automation.log
           retention-days: 14
-      - name: Show run summary
-        if: always()
-        shell: bash
-        run: |
-          if [ -f review/run-summary.json ]; then
-            printf '\x60\x60\x60json\n' >> "$GITHUB_STEP_SUMMARY"
-            cat review/run-summary.json >> "$GITHUB_STEP_SUMMARY"
-            printf '\n\x60\x60\x60\n' >> "$GITHUB_STEP_SUMMARY"
-          fi
