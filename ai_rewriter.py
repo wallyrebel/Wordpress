@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v6-source-supported-length"
+PROMPT_VERSION = "evidence-v7-briefs-and-time-formatting-2"
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -96,6 +96,9 @@ For short notices or sparse sources, write a shorter brief: there is no hard
 minimum. Never repeat facts, stretch quotations or invent background to reach
 300 words. A complete accurate brief is preferable to padding. Length is an
 editorial target, not a reason to reject an otherwise complete short article.
+If the source states only one development and location, one short body paragraph
+is enough. Do not add statements about information being unavailable or not
+released (such as 'no additional details') unless the source explicitly says so.
 Lead with the main development; retain attribution and allegation qualifiers.
 Use natural AP-style prose. Do not keyword-stuff Mississippi or claim independent
 reporting. Summarize the story in your own words. When including a direct
@@ -159,6 +162,9 @@ def check_direct_quotes(text, source):
             raise ModelOutputError("Direct quotation differs from source")
 
 def numeric_tokens(value):
+    # Police releases often join the meridiem to the time ("1:56am"). Without
+    # a boundary, the numeric regex backtracks and reads that as just "1".
+    value = re.sub(r"(?<=\d)(?=[ap]\.?m\.?(?:\b|$))", " ", value, flags=re.I)
     # AP style omits :00 in whole-hour times. Accept that exact equivalence,
     # while keeping nonzero minutes, quantities, dates and all other checks.
     value = re.sub(r"\b(1[0-2]|0?[1-9]):00(?=\s*[ap]\.?m\.?(?:\b|\s|$))",
@@ -183,8 +189,11 @@ def rewrite_article(title, content, link, openai_client, *,
                     publisher="", source_date="", max_source_chars=24000,
                     approved_primary_source=False):
     source = clean_text(content)
-    if len(source.split()) < 20:
-        raise InsufficientSource("Fewer than 20 source words; no title-only expansion")
+    # Approved primary sources can issue complete breaking-news briefs in fewer
+    # than 20 words. Extraction and verification still require concrete facts.
+    minimum_words = 8 if approved_primary_source else 20
+    if len(source.split()) < minimum_words:
+        raise InsufficientSource(f"Fewer than {minimum_words} source words; no title-only expansion")
     if len(source) > max_source_chars:
         raise InsufficientSource("Source exceeds limit; review rather than truncate")
     usage = []
@@ -233,8 +242,9 @@ def rewrite_article(title, content, link, openai_client, *,
     check_direct_quotes(combined, source)
     if len(combined.split()) > 650:
         raise ModelOutputError("Draft exceeds maximum length")
-    if numeric_tokens(combined) - numeric_tokens(source):
-        raise ModelOutputError("Numeric tokens absent from source")
+    unsupported_numbers = numeric_tokens(combined) - numeric_tokens(source)
+    if unsupported_numbers:
+        raise ModelOutputError("Numeric tokens absent from source: " + ", ".join(sorted(unsupported_numbers)))
     sensitive = extraction.sensitive or bool(re.search(
         r"\b(arrest|charged|killed|death|died|murder|missing|alleg|election|medical|tornado|evacuat|correction)\w*\b",
         source, re.I))

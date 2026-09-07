@@ -6,6 +6,8 @@ The publisher has approved all configured RSS feeds as factual, first-person sou
 
 Article length: aim for 300–500 body words when the source supports a full article. Extract and cover all useful material details from substantial reports. Short notices can remain shorter; do not add repetition, invented context or stretched quotations to meet a word count. This is an editorial target, not a Google minimum or a publication gate. The existing maximum length and factual checks still apply.
 
+Approved primary-source briefs with at least eight source words can proceed to fact extraction even when shorter than 20 words. Concrete facts, supported entity tags, a usable source image and full factual verification are still required; titles alone do not qualify. Numeric validation accepts equivalent time formatting such as `1:56am` and `1:56 a.m.` while rejecting changed minutes or hours. The prompt version changes when these checks change, so cached rejections are reconsidered without republishing articles that already have WordPress receipts.
+
 It publishes automatically only when every requirement passes:
 
 - A current, dated source from your configured feed list.
