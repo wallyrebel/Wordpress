@@ -62,7 +62,7 @@ Full-page scraping is off by default. Enable `allow_scrape` only for sources you
 
 Images come from the feed's media and image candidates; up to five candidates are checked. Small, corrupt, oversized or non-image responses are rejected. Pexels guessing was removed: an unrelated stock picture should not pass as an event photograph. Use `image_credit` for an actual supplied photographer/provider credit; otherwise the caption labels the source, without asserting ownership.
 
-Tags are limited to up to five names of people, organizations and places that occur in the source. Existing tags are reused; new source-grounded entity tags can be created. Dates and numeric strings are excluded. Category names come from a fixed allowlist and are mapped to existing site sections.
+Tags are limited to up to five names of people, organizations and places that occur in the source. For an approved first-person source with no usable names in its text, the known feed/configured publisher supplies the source tag. This supports complete safety advisories that do not repeat the department's name; it never supplies missing incident facts or unidentified subjects. Existing tags are reused; new source-grounded entity tags can be created. Dates and numeric strings are excluded. Category names come from a fixed allowlist and are mapped to existing site sections.
 
 ## Reliability and migration
 
@@ -75,6 +75,7 @@ Tags are limited to up to five names of people, organizations and places that oc
 - A missing/temporarily unavailable source image is checked up to three times, at least 30 minutes apart, before staying held. Image checks do not spend model tokens. Changed source/image input, prompts, models or policy can reopen a held item.
 - Eligible entries across all feeds are processed oldest first, rather than always favoring the top of `feeds.txt`. Items beyond the model budget are explicitly reported as deferred for the next run. The freshness window still applies: deferred items must remain available in the feed and within `MAX_AGE_HOURS` (24 by default). Persistent deferrals call for reviewing throughput or the window.
 - Approved-source text has no arbitrary minimum word count. Even a short complete notice goes through extraction and verification; empty text, placeholders and unsupported expansions cannot publish.
+- Specific safety advisories can publish as attributed briefs without inventing an incident, date or campaign. If the writer adds a sentence period inside an otherwise exact quotation, the period moves outside the quotation before verification; changed quoted words remain blocked.
 - Existing-post updates are cached and do not consume the model-attempt budget. Legacy adoption records the source content hash, so rotating feed metadata does not become a false article correction. Missing-image checks also do not consume paid model attempts; run summaries include rejection reasons.
 - Image upload failures, API failures and failed checks never fall through to publication.
 - The Actions schedule runs every 15 minutes, offset from the hour. A concurrency group prevents overlap; the job has a 20-minute limit. Partial feed failures produce a failing run instead of a misleading green success.

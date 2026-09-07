@@ -3,7 +3,8 @@ import json
 from unittest.mock import Mock
 
 from ai_rewriter import (Draft, Extraction, Fact, InsufficientSource, ModelOutputError,
-                         Paragraph, Verification, numeric_tokens, rewrite_article)
+                         Paragraph, Verification, numeric_tokens, rewrite_article,
+                         normalize_quote_stops, check_direct_quotes)
 from test_workflow import SOURCE, draft, fake_client
 
 BRIEF = ("The Jackson Police Department is currently conducting a homicide investigation "
@@ -11,6 +12,21 @@ BRIEF = ("The Jackson Police Department is currently conducting a homicide inves
 
 
 class JacksonRegressions(unittest.TestCase):
+    def test_added_sentence_period_moves_outside_exact_quotation(self):
+        source = 'Drive Sober or Get Pulled Over'
+        for original, expected in [
+                ('Police said, "Drive Sober or Get Pulled Over."', 'Police said, "Drive Sober or Get Pulled Over".'),
+                ('Police said, “Drive Sober or Get Pulled Over.”', 'Police said, “Drive Sober or Get Pulled Over”.')]:
+            normalized = normalize_quote_stops(original, source)
+            self.assertEqual(normalized, expected)
+            check_direct_quotes(normalized, source)
+        altered = 'Police said, "Drive Sober or Get Arrested."'
+        self.assertEqual(normalize_quote_stops(altered, source), altered)
+        with self.assertRaises(ModelOutputError):
+            check_direct_quotes(altered, source)
+        exact = 'Police said, "Drive Sober or Get Pulled Over."'
+        self.assertEqual(normalize_quote_stops(exact, source + '.'), exact)
+
     def test_attached_meridiem_keeps_minutes(self):
         for original in ('1:56am', '1:56AM', '1:56a.m.', '1:56 am'):
             self.assertEqual(numeric_tokens(original), {'1:56'})
@@ -91,3 +107,22 @@ class JacksonRegressions(unittest.TestCase):
             rewrite_article('Photos', 'Photos from Tupelo Library', 'https://example.org',
                             client, approved_primary_source=True)
         self.assertEqual(client.responses.parse.call_count, 1)
+
+    def test_first_person_advisory_uses_known_publisher_when_text_has_no_names(self):
+        source = 'If you plan to drink, plan for a safe ride home. A designated driver, rideshare, or taxi can make all the difference.'
+        extraction = Extraction(mississippi_relevant=True, sensitive=False,
+            category='Community', entities=[], facts=[Fact(id='f1', statement='The publisher advises arranging a safe ride.', evidence=source)])
+        generated = Draft(headline='Hattiesburg police urge safe rides home',
+            headline_fact_ids=['f1'], excerpt='Hattiesburg police advise arranging a safe ride after drinking.',
+            paragraphs=[Paragraph(text='Hattiesburg police advised people who plan to drink to arrange a safe ride home with a designated driver, rideshare or taxi.', fact_ids=['f1'])])
+        result = rewrite_article('Safety reminder', source, 'https://example.org',
+            fake_client(extraction, generated), approved_primary_source=True,
+            publisher='Hattiesburg Police Department (Official) on Facebook')
+        self.assertEqual(result.tags, ['hattiesburg police department (official)'])
+        self.assertFalse(result.requires_review)
+        with self.assertRaises(InsufficientSource):
+            rewrite_article('Safety reminder', source, 'https://example.org', fake_client(extraction, generated))
+        extraction.facts = []
+        with self.assertRaisesRegex(InsufficientSource, 'Missing central facts'):
+            rewrite_article('Vague request', 'Please call if you know his whereabouts.', 'https://example.org',
+                fake_client(extraction), approved_primary_source=True, publisher='Police department')
