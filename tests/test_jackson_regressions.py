@@ -1,4 +1,5 @@
 import unittest
+import json
 from unittest.mock import Mock
 
 from ai_rewriter import (Draft, Extraction, Fact, InsufficientSource, ModelOutputError,
@@ -48,11 +49,14 @@ class JacksonRegressions(unittest.TestCase):
         client = self.brief_client()
         article = rewrite_article('Photos from Jackson Police Department', BRIEF,
             'https://www.facebook.com/1182108394098308/posts/1381165100859302', client,
-            publisher='Jackson Police Department', approved_primary_source=True)
+            publisher='Jackson Police Department', source_date='2026-09-07T00:49:23+00:00',
+            approved_primary_source=True)
         self.assertFalse(article.requires_review)
         self.assertTrue(article.tags)
         self.assertEqual(client.responses.parse.call_count, 3)
         self.assertEqual(client.responses.parse.call_args.kwargs['reasoning']['effort'], 'medium')
+        writer_payload = json.loads(client.responses.parse.call_args_list[1].kwargs['input'][1]['content'])
+        self.assertNotIn('source_date', writer_payload)
 
     def test_short_brief_with_unsupported_claim_still_rejected(self):
         client = self.brief_client(Verification(supported=False, issues=['Unsupported victim detail']))

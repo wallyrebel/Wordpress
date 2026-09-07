@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v7-briefs-and-time-formatting-2"
+PROMPT_VERSION = "evidence-v7-briefs-and-time-formatting-3"
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -106,6 +106,8 @@ quotation, copy its wording EXACTLY from source_text and attribute it to the
 source. Never rewrite words inside quotation marks or invent quotations.
 Use quotations selectively; summarize the remaining factual information.
 Source URL and publisher identify attribution only, not additional story facts.
+Feed timestamps are publication metadata, not event dates. Do not add a calendar
+date, weekday or time unless it explicitly occurs in source_text.
 Return plain text, never HTML or Markdown. Headline: <=100 characters.
 Excerpt: <=160 characters, only supported facts. At most 8 paragraphs, 600 words.
 Every paragraph and headline must cite supporting fact ids ONLY in the separate
@@ -217,8 +219,7 @@ def rewrite_article(title, content, link, openai_client, *,
         fact.evidence = exact_evidence
     draft = _call(openai_client, drafting_model, "none", Draft, DRAFT_PROMPT,
         {"evidence": extraction.model_dump(), "source_text": source,
-         "source_url": link, "publisher": publisher,
-         "source_date": source_date}, 2200, usage)
+         "source_url": link, "publisher": publisher}, 2200, usage)
     # Some drafts repeat schema references as [f1] in prose. Those are internal
     # bookkeeping, not source quotations or reader-facing citations.
     reference_pattern = r"\[(?:" + "|".join(re.escape(key) for key in facts) + r")\]"
