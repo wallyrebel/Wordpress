@@ -1,0 +1,29 @@
+name: RSS source connectivity check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install tested dependencies
+        run: pip install -r requirements.lock
+      - name: Check every configured RSS feed without AI or WordPress
+        run: python scripts/check_feeds.py
+      - name: Save source connectivity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rss-source-connectivity-${{ github.run_id }}
+          path: review/feed-connectivity.*
+          retention-days: 14

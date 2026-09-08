@@ -16,6 +16,8 @@ def render_report(stats, items):
         f"Feeds configured: **{stats.get('feeds_configured', len(stats.get('feeds', {})))}** · "
         f"Read successfully: **{stats.get('feeds_ok', 0)}** · Failed: **{stats.get('feeds_failed', 0)}** · "
         f"Deferred: **{stats.get('deferred', 0)}** · Model-attempt limit: **{stats.get('model_attempt_budget', 'unknown')}**", '',
+        f"Sources retried after a connection error: **{stats.get('feeds_retried', 0)}** · "
+        f"Recovered on retry: **{stats.get('feeds_recovered', 0)}**", '',
         '### Feed coverage', '', '| Source | Read | Eligible | Published | Already processed | Held / retry | Deferred | Old / undated / invalid |',
         '|---|---|---:|---:|---:|---:|---:|---:|']
     for url, feed in stats.get('feeds', {}).items():

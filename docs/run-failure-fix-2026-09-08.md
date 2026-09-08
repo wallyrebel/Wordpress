@@ -28,3 +28,26 @@ document handling, and a genuine error that still fails with a safe stage label.
 Related pending source work in this change adds tested CivicEngage article-body
 extraction, WordPress featured-photo fallback and optional dedicated-source
 category routing. Source additions are documented separately.
+
+## Live verification and intermittent source connectivity
+
+Run [11113](https://github.com/wallyrebel/Wordpress/actions/runs/34258563621)
+had already started on the old code. It published five articles and failed on
+the same video redirect; it did not reveal another item-processing error.
+
+The first run with the fix,
+[11114](https://github.com/wallyrebel/Wordpress/actions/runs/34260013202), correctly
+reported that video as an insufficient-source hold instead of an error. It
+published two articles with zero item-processing errors, but the MHSAA native
+RSS feed had a ConnectTimeout from the GitHub runner: 154/155 sources were read.
+This is a separate transport failure, not a recurrence of the video defect.
+
+Transport failures now receive a second read pass after the other sources,
+using fresh connections. Successful sources are not downloaded again. Reports
+identify sources retried and recovered; unresolved feed failures still produce
+a failed run. Regression tests exercise both recovery and persistent failure.
+The optional **RSS source connectivity check** Actions workflow checks all
+configured feeds from GitHub without any OpenAI or WordPress credentials/calls,
+so connection problems can be diagnosed without spending on rewriting.
+
+Validation after the retry improvement: 89 offline tests passed.

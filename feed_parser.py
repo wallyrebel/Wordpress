@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit, urljoin
 import feedparser
 from bs4 import BeautifulSoup
+from requests import RequestException
 from ai_rewriter import clean_text, InsufficientSource
 from safe_http import canonical_url, fetch_bytes
 
@@ -60,8 +61,21 @@ def fetch_feeds_with_raw(feed_urls, max_entries_per_feed=25, max_age_hours=24, s
     # Four bounded reads keep a slow source from delaying the entire expanded list.
     with ThreadPoolExecutor(max_workers=4) as pool:
         fetched = list(pool.map(_read_feed, feed_urls))
+        # Retry transport failures after the other feeds have had a turn. A
+        # fresh connection can recover an intermittent source timeout without
+        # replaying successful sources or hiding an unresolved failure.
+        retry_indexes = [i for i, (_, error) in enumerate(fetched)
+                         if isinstance(error, (RequestException, TimeoutError))]
+        retried = list(pool.map(_read_feed, [feed_urls[i] for i in retry_indexes]))
+    for index, result in zip(retry_indexes, retried):
+        fetched[index] = result
+    if retry_indexes:
+        stats['feeds_retried'] = len(retry_indexes)
+    retry_urls = {feed_urls[i] for i in retry_indexes}
     for url, (data, error) in zip(feed_urls, fetched):
         detail = stats.setdefault("feeds", {}).setdefault(url, {})
+        retried_feed = url in retry_urls
+        detail['read_attempts'] = 2 if retried_feed else 1
         try:
             if error:
                 raise error
@@ -94,6 +108,9 @@ def fetch_feeds_with_raw(feed_urls, max_entries_per_feed=25, max_age_hours=24, s
             results.extend(eligible)
             detail.update(status="ok", eligible=len(eligible))
             stats["feeds_ok"] = stats.get("feeds_ok", 0) + 1
+            if retried_feed:
+                detail['recovered_on_retry'] = True
+                stats['feeds_recovered'] = stats.get('feeds_recovered', 0) + 1
         except Exception as exc:
             logger.warning("Feed read failed (%s): %s", type(exc).__name__, urlsplit(url).hostname)
             stats["feeds_failed"] = stats.get("feeds_failed", 0) + 1

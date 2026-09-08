@@ -41,6 +41,35 @@ class ExpandedSourceTests(unittest.TestCase):
             fetch_feeds_with_raw(['https://example.org/feed'], stats=stats)
         self.assertEqual(stats['feeds_failed'], 1)
 
+    def test_transient_feed_timeout_retries_only_that_feed_and_reports_recovery(self):
+        urls = ['https://example.org/slow', 'https://example.org/healthy']
+        calls = []
+        xml = b'<rss version="2.0"><channel><title>Source</title></channel></rss>'
+        def response(url):
+            calls.append(url)
+            if url == urls[0] and calls.count(url) == 1:
+                raise TimeoutError()
+            return xml, 'application/rss+xml', url
+        stats = {}
+        with patch('feed_parser.fetch_bytes', side_effect=response):
+            fetch_feeds_with_raw(urls, stats=stats)
+        self.assertEqual(calls.count(urls[0]), 2)
+        self.assertEqual(calls.count(urls[1]), 1)
+        self.assertEqual(stats['feeds_ok'], 2)
+        self.assertEqual(stats.get('feeds_failed', 0), 0)
+        self.assertEqual(stats['feeds_retried'], 1)
+        self.assertEqual(stats['feeds_recovered'], 1)
+        self.assertTrue(stats['feeds'][urls[0]]['recovered_on_retry'])
+
+    def test_persistent_feed_timeout_remains_visible_as_a_failure(self):
+        stats = {}
+        with patch('feed_parser.fetch_bytes', side_effect=TimeoutError()) as fetch:
+            fetch_feeds_with_raw(['https://example.org/slow'], stats=stats)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(stats['feeds_failed'], 1)
+        self.assertEqual(stats.get('feeds_recovered', 0), 0)
+        self.assertEqual(stats['feeds']['https://example.org/slow']['read_attempts'], 2)
+
     def test_dedicated_sports_feed_keeps_sports_taxonomy_when_model_chooses_community(self):
         self.cfg.sources[self.entry.feed_url] = SourcePolicy(category='Sports')
         self.fixture.run_flow()

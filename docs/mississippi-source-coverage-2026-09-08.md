@@ -2,7 +2,7 @@
 
 ## Connected additions
 
-The repository now scans 155 feeds. This pass adds 20 beyond the already-connected Lauderdale and Marion sheriff feeds: eight more sheriff Facebook pages, six city police pages, five state agencies and Jackson County’s native crime-report RSS.
+The repository now scans 155 feeds: all 131 feeds in the FetchRSS account plus 24 direct RSS feeds. This pass adds 20 beyond the already-connected Lauderdale and Marion sheriff feeds: eight more sheriff Facebook pages, six city police pages, five state agencies and Jackson County’s native crime-report RSS. Both unsuitable test feeds created during research were removed; none of the original 110 account feeds was removed.
 
 Activity counts below are observed feed entries, not published articles. FetchRSS exposes at most the latest 25 entries, so 30-day counts can be lower bounds. New pages were cross-checked against official websites and public activity; less frequent sources are identified by their counts. Only eligible, sufficiently sourced stories with an approved featured image, category and tags publish. No drafts are created.
 

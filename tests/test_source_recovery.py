@@ -150,7 +150,11 @@ class FeedReportingTests(unittest.TestCase):
         urls = ['https://example.org/broken', 'https://example.org/empty']
         xml = b'<rss version="2.0"><channel><title>Empty source</title></channel></rss>'
         stats = {}
-        with patch('feed_parser.fetch_bytes', side_effect=[TimeoutError(), (xml, 'application/rss+xml', urls[1])]):
+        def response(url):
+            if url == urls[0]:
+                raise TimeoutError()
+            return xml, 'application/rss+xml', url
+        with patch('feed_parser.fetch_bytes', side_effect=response):
             self.assertEqual(fetch_feeds_with_raw(urls, stats=stats), [])
         self.assertEqual(stats['feeds_failed'], 1)
         self.assertEqual(stats['feeds_ok'], 1)
