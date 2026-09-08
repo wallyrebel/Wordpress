@@ -274,3 +274,8 @@ https://careyathletics.com/rss
 https://www.misshsaa.com/feed/
 # Mississippi Department of Environmental Quality
 https://www.mdeq.ms.gov/feed/
+
+# Lauderdale County Sheriff's Office, Mississippi — official Facebook
+https://fetchrss.com/feed/1vcaujD2G3c21x3zElC3f1PW.rss
+# Marion County Sheriff's Office, Mississippi — official Facebook
+https://fetchrss.com/feed/1vcaujD2G3c21x3zG9BdX8Kh.rss

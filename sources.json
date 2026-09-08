@@ -416,5 +416,19 @@
       "www.mdeq.ms.gov",
       "mdeq.ms.gov"
     ]
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zElC3f1PW.rss": {
+    "publisher": "Lauderdale County Sheriff's Office, Mississippi",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zG9BdX8Kh.rss": {
+    "publisher": "Marion County Sheriff's Office, Mississippi",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
   }
 }

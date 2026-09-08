@@ -44,3 +44,14 @@ Repository Actions variables can override the defaults. Local `.env` values can 
 - NWS Mississippi Atom alerts are valid but have no source image and need explicit expiry/update handling. The account's NWS Jackson and Memphis feeds are now connected for weather reporting; a dedicated live-alert integration should handle the native alert stream.
 
 Validation: 79 offline Python regression tests passed; all 133 configured URLs scanned successfully; eight active direct athletics sources passed the article-text and image preflight. No paid model calls or WordPress writes were made by the preflight.
+
+## Lauderdale and Marion sheriff feeds
+
+Both public Facebook pages were converted in the publisher's FetchRSS account and connected to automatic article generation on September 8. The configured total is now **135 feeds**. The same factual, featured-image, category and tag checks apply before publication.
+
+| Agency | Public Facebook page | Official identity confirmation | FetchRSS | Observed recent activity |
+|---|---|---|---|---|
+| Lauderdale County Sheriff's Office, Mississippi | https://www.facebook.com/LCSOMS | https://www.lauderdaleso.org/ | https://fetchrss.com/feed/1vcaujD2G3c21x3zElC3f1PW.rss | 10 posts in the past 7 days; latest September 8, 2026 |
+| Marion County Sheriff's Office, Mississippi | https://www.facebook.com/marioncountysheriffms/ | https://www.marioncountysheriff.org/ | https://fetchrss.com/feed/1vcaujD2G3c21x3zG9BdX8Kh.rss | 4 posts in the past 7 days; latest September 8, 2026 |
+
+The first production run after the initial 133-feed expansion, [run 11110](https://github.com/wallyrebel/Wordpress/actions/runs/34254026566), read 133/133 successfully, published 11 articles (including six from sports sources), reported zero processing errors, and deferred 64 items when its time budget was reached. Deferred items remain subject to the existing freshness window and publication checks.
