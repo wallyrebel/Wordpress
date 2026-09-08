@@ -17,7 +17,7 @@ from config import load_config
 from database import Store
 from feed_parser import fetch_feeds_with_raw, enrich_entry
 from image_handler import get_source_image, IMAGE_POLICY_VERSION
-from wordpress_api import WordPressAPI
+from wordpress_api import WordPressAPI, safe_http_details
 
 logger = logging.getLogger(__name__)
 MAX_ITEM_MODEL_ATTEMPTS = 2
@@ -278,10 +278,16 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
             except Exception as exc:
                 stats["errors"] += 1
                 # Never include HTTP request objects/headers or keys in logs.
-                logger.error("Item held; source=%s stage=%s error=%s", key[:12], stage, type(exc).__name__)
+                details = safe_http_details(exc)
+                reason = stage + ": " + type(exc).__name__
+                if details:
+                    reason += " HTTP " + str(details["http_status"])
+                    if details.get("api_error_code"):
+                        reason += " (" + details["api_error_code"] + ")"
+                logger.error("Item held; source=%s error=%s", key[:12], reason)
                 write_json(Path(config.review_dir) / (key + ".json"),
-                    {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__})
-                observe(entry, "error", stage + ": " + type(exc).__name__)
+                    {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__, **details})
+                observe(entry, "error", reason)
         if stats.get("feeds_failed"):
             stats["errors"] += stats["feeds_failed"]
         return stats
