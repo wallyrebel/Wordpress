@@ -45,7 +45,8 @@ See `.env.example`. Defaults:
 | EXTRACTION_MODEL | gpt-5-nano |
 | DRAFTING_MODEL | gpt-5.6-luna |
 | PUBLISH_MODE | auto |
-| MAX_POSTS_PER_RUN | 10 |
+| MAX_POSTS_PER_RUN | 30 |
+| MAX_RUN_SECONDS | 600 |
 | MAX_ENTRIES_PER_FEED | 25 |
 | MAX_AGE_HOURS | 24 |
 | POLL_INTERVAL_MINUTES | 15 |

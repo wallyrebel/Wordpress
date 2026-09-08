@@ -1,1 +1,420 @@
-{}
+{
+  "https://bmcusports.com/rss.aspx?path=baseball": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=mbball": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=wbball": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=softball": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=vball": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=msoc": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=wsoc": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=mcross": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=wcross": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=mtrack": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://bmcusports.com/rss.aspx?path=wtrack": {
+    "publisher": "Blue Mountain Christian University Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "bmcusports.com",
+      "www.bmcusports.com"
+    ]
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vpzug4yT20Q.rss": {
+    "publisher": "Magnolia Shine Podcast"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vpwrOANoC1a.rss": {
+    "publisher": "Mississippi High School Sports"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vpwqt6XwCPr.rss": {
+    "publisher": "Mississippi High School Sports Page"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vpwnFCD02DK.rss": {
+    "publisher": "Blake Levine Sports Reporter"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhUCBEOX3Ry.rss": {
+    "publisher": "Panola County Sheriff's Office- MS"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhUAy4821K7.rss": {
+    "publisher": "Batesville - MS Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhU814h887q.rss": {
+    "publisher": "Mississippi Delta Community College"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhU0cB847Yx.rss": {
+    "publisher": "City of Greenwood - Mayor's Office"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTyv0Mm73T.rss": {
+    "publisher": "City of Greenville, Mississippi - Government"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTy91J68Ys.rss": {
+    "publisher": "Washington County Economic Alliance"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTwY9W5Fbn.rss": {
+    "publisher": "Greenville Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTvP4821K6.rss": {
+    "publisher": "Bolivar County Emergency Operations Center"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTuoFBZ8LC.rss": {
+    "publisher": "Tunica County Sheriff's Office"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTu57ktBFq.rss": {
+    "publisher": "Cleveland MS Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhTtJ3ZGC3e.rss": {
+    "publisher": "City of Cleveland, Mississippi - A Different Kind of Delta"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhD7c9TI0MV.rss": {
+    "publisher": "Northwest Rangers Athletics"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhD52Akw9XH.rss": {
+    "publisher": "Landers Center"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhD0bCMwAMs.rss": {
+    "publisher": "City of Southaven - Municipal Government"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCxD2CK9GF.rss": {
+    "publisher": "Southaven Chamber of Commerce"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCvFAPq3EK.rss": {
+    "publisher": "Northwest Mississippi Community College"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCtnBN10Z8.rss": {
+    "publisher": "Olive Branch Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCsg77bAmw.rss": {
+    "publisher": "DeSoto Family Theatre"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCrnFg5EPi.rss": {
+    "publisher": "Southaven Fire Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCql2CK9GE.rss": {
+    "publisher": "Hernando Main Street Chamber of Commerce"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCpw79HF3y.rss": {
+    "publisher": "Hernando Parks"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCnzALf57y.rss": {
+    "publisher": "Horn Lake Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhCmJ0IyGJO.rss": {
+    "publisher": "City of Olive Branch - Government"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhClV2mSEJm.rss": {
+    "publisher": "Olive Branch Parks and Recreation"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vhBbG8np6c8.rss": {
+    "publisher": "Mississippi Department of Human Services"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7nt1zDFam.rss": {
+    "publisher": "Town of Ecru Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7nECOb1qN.rss": {
+    "publisher": "Pontotoc Electric Power Association"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7mX75E8w6.rss": {
+    "publisher": "Town of Ecru"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7lo1260by.rss": {
+    "publisher": "Pontotoc County Chamber Main Street"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7kh8MV2fT.rss": {
+    "publisher": "Pontotoc Athletics"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7jv1zDFal.rss": {
+    "publisher": "Pontotoc Community Theater"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vh7i87AH0Kz.rss": {
+    "publisher": "Pontotoc County Sheriff's Department, Mississippi"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgnHqF4TAaZ.rss": {
+    "publisher": "Mississippi Department of Transportation"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgnEw6nk5ic.rss": {
+    "publisher": "Ingomar Attendance Center"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgnBZ7wcFrm.rss": {
+    "publisher": "Mississippi Department of Revenue"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgn2F3WQ9KM.rss": {
+    "publisher": "Lafayette County EMA"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgn1a9hcBJi.rss": {
+    "publisher": "Oxford Charger Booster Club"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgmzP4YvDZa.rss": {
+    "publisher": "City of Oxford"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgmxPFFOAAU.rss": {
+    "publisher": "Oxford School District"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgkZV4wuCpe.rss": {
+    "publisher": "Tupelo Fire Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgkYREaLAte.rss": {
+    "publisher": "Tupelo Community Theatre"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgkX7DmfBnR.rss": {
+    "publisher": "Tupelo Public School District"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgkWTGFD3nu.rss": {
+    "publisher": "University of Mississippi - Tupelo"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgkUd7FG5je.rss": {
+    "publisher": "Downtown Tupelo"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgkTkDmfBnQ.rss": {
+    "publisher": "City of Tupelo - Mayor's Office"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZk4BRo7Yh.rss": {
+    "publisher": "Union County School District"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZj0Cx18ri.rss": {
+    "publisher": "New Albany Main Street Association"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZgtFMPA6c.rss": {
+    "publisher": "New Albany Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZfc0X8EWh.rss": {
+    "publisher": "New Albany School District"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZevGZFCYM.rss": {
+    "publisher": "Union County Heritage Museum"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZdj0Jp5zS.rss": {
+    "publisher": "New Albany High School"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgZcMBYf3ne.rss": {
+    "publisher": "New Albany Fire/Rescue"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgQpa7W4E67.rss": {
+    "publisher": "Booneville High School - Booneville, Mississippi"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgQoj9p490W.rss": {
+    "publisher": "Booneville School District - Mississippi"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgQo05nA1Lx.rss": {
+    "publisher": "Baldwyn School District"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgQn25aq35m.rss": {
+    "publisher": "City of Booneville"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgQmMDQnBLX.rss": {
+    "publisher": "Prentiss County Sheriff's Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vgQkh8y8Dwo.rss": {
+    "publisher": "Northeast Tiger Athletics"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vfoORA4wG0o.rss": {
+    "publisher": "Mississippi Department of Wildlife, Fisheries, and Parks"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUyUCou5ru.rss": {
+    "publisher": "Amory Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUuY5240MW.rss": {
+    "publisher": "Northeast Mississippi Community College"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUu06F62dA.rss": {
+    "publisher": "Northeast Mississippi Community College - Adult Education"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUrL5VAA1k.rss": {
+    "publisher": "Blue Mountain Christian University"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUqd5240MV.rss": {
+    "publisher": "City of Ripley, MS"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUps9A70IP.rss": {
+    "publisher": "Ripley Main Street"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vdUpJ5VAA1j.rss": {
+    "publisher": "US National Weather Service Memphis Tennessee"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcyCP2E791G.rss": {
+    "publisher": "Columbus Police Department, MS"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcx5mEzl4xf.rss": {
+    "publisher": "Lafayette County Sheriff's Office"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcwxo26ADKt.rss": {
+    "publisher": "DeSoto County District Attorney's Office"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcwwqEms7Aw.rss": {
+    "publisher": "DeSoto County Government"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcwwB5I21fm.rss": {
+    "publisher": "Port Gibson Police Department"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcwtK22d6Dr.rss": {
+    "publisher": "City of Meridian-Government"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vcetH3lhGws.rss": {
+    "publisher": "US National Weather Service Jackson Mississippi"
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21vceVC24f7u8.rss": {
+    "publisher": "Magee Police Department"
+  },
+  "https://hailstate.com/rss": {
+    "publisher": "Mississippi State Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "hailstate.com",
+      "www.hailstate.com"
+    ]
+  },
+  "https://olemisssports.com/rss": {
+    "publisher": "Ole Miss Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "olemisssports.com",
+      "www.olemisssports.com"
+    ]
+  },
+  "https://southernmiss.com/rss": {
+    "publisher": "Southern Miss Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "southernmiss.com",
+      "www.southernmiss.com"
+    ]
+  },
+  "https://gojsutigers.com/rss": {
+    "publisher": "Jackson State Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "gojsutigers.com",
+      "www.gojsutigers.com"
+    ]
+  },
+  "https://alcornsports.com/rss": {
+    "publisher": "Alcorn State Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "alcornsports.com",
+      "www.alcornsports.com"
+    ]
+  },
+  "https://mvsusports.com/rss": {
+    "publisher": "Mississippi Valley State Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "mvsusports.com",
+      "www.mvsusports.com"
+    ]
+  },
+  "https://gostatesmen.com/rss": {
+    "publisher": "Delta State Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "gostatesmen.com",
+      "www.gostatesmen.com"
+    ]
+  },
+  "https://www.gochoctaws.com/rss": {
+    "publisher": "Mississippi College Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "www.gochoctaws.com",
+      "gochoctaws.com"
+    ]
+  },
+  "https://gomajors.com/rss": {
+    "publisher": "Millsaps Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "gomajors.com",
+      "www.gomajors.com"
+    ]
+  },
+  "https://careyathletics.com/rss": {
+    "publisher": "William Carey Athletics",
+    "allow_scrape": true,
+    "article_hosts": [
+      "careyathletics.com",
+      "www.careyathletics.com"
+    ]
+  },
+  "https://www.misshsaa.com/feed/": {
+    "publisher": "Mississippi High School Activities Association",
+    "allow_scrape": true,
+    "article_hosts": [
+      "www.misshsaa.com",
+      "misshsaa.com"
+    ]
+  },
+  "https://www.mdeq.ms.gov/feed/": {
+    "publisher": "Mississippi Department of Environmental Quality",
+    "allow_scrape": true,
+    "article_hosts": [
+      "www.mdeq.ms.gov",
+      "mdeq.ms.gov"
+    ]
+  }
+}

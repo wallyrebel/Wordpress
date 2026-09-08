@@ -13,8 +13,11 @@ def render_report(stats, items):
     lines = ['## RSS publishing report', '',
         f"Published: **{stats.get('created', 0)}** · Model attempts: **{stats.get('model_attempts', 0)}** · "
         f"Items needing attention or retry: **{stats.get('attention_required', 0)}** · Errors: **{stats.get('errors', 0)}**", '',
-        '### Feed coverage', '', '| Source | Read | Eligible | Published | Held / retry | Deferred | Old / undated / invalid |',
-        '|---|---|---:|---:|---:|---:|---:|']
+        f"Feeds configured: **{stats.get('feeds_configured', len(stats.get('feeds', {})))}** · "
+        f"Read successfully: **{stats.get('feeds_ok', 0)}** · Failed: **{stats.get('feeds_failed', 0)}** · "
+        f"Deferred: **{stats.get('deferred', 0)}** · Model-attempt limit: **{stats.get('model_attempt_budget', 'unknown')}**", '',
+        '### Feed coverage', '', '| Source | Read | Eligible | Published | Already processed | Held / retry | Deferred | Old / undated / invalid |',
+        '|---|---|---:|---:|---:|---:|---:|---:|']
     for url, feed in stats.get('feeds', {}).items():
         outcomes = feed.get('outcomes', {})
         holds = sum(count for status, count in outcomes.items()
@@ -22,7 +25,7 @@ def render_report(stats, items):
         rejected = sum(feed.get(key, 0) for key in ('stale', 'undated_or_future', 'invalid'))
         source = cell(feed.get('publisher') or url)
         lines.append(f"| {source}<br>{cell(url)} | {cell(feed.get('error_type') or feed.get('status', 'unknown'))} | "
-            f"{feed.get('eligible', 0)} | {outcomes.get('publish', 0)} | {holds} | {outcomes.get('deferred', 0)} | {rejected} |")
+            f"{feed.get('eligible', 0)} | {outcomes.get('publish', 0)} | {outcomes.get('duplicate', 0)} | {holds} | {outcomes.get('deferred', 0)} | {rejected} |")
     attention = [item for item in items if item.get('status') not in ('publish', 'preview', 'duplicate')]
     if attention:
         lines += ['', '### Items needing attention or retry', '', '| Source item | Outcome | Reason |', '|---|---|---|']

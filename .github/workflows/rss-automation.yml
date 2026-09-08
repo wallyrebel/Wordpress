@@ -20,7 +20,7 @@ concurrency:
 jobs:
   publish-articles:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,7 +48,8 @@ jobs:
           EXTRACTION_MODEL: gpt-5-nano
           DRAFTING_MODEL: gpt-5.6-luna
           CATEGORY_IDS_JSON: ${{ vars.CATEGORY_IDS_JSON || '{}' }}
-          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '10' }}
+          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '30' }}
+          MAX_RUN_SECONDS: ${{ vars.MAX_RUN_SECONDS || '600' }}
           DRY_RUN: ${{ inputs.dry_run || false }}
         shell: bash
         run: |

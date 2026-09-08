@@ -33,7 +33,8 @@ class Config:
     extraction_model: str = "gpt-5-nano"
     drafting_model: str = "gpt-5.6-luna"
     publish_mode: str = "auto"
-    max_posts_per_run: int = 10
+    max_posts_per_run: int = 30
+    max_run_seconds: int = 600
     max_entries_per_feed: int = 25
     max_age_hours: int = 24
     review_dir: str = "./review"
@@ -90,7 +91,8 @@ def load_config(require_wp=True):
         image_dir=os.getenv("IMAGE_DIR", "./images"), database_path=os.getenv("DATABASE_PATH", "./processed.db"),
         extraction_model=os.getenv("EXTRACTION_MODEL", "gpt-5-nano"),
         drafting_model=os.getenv("DRAFTING_MODEL", "gpt-5.6-luna"), publish_mode=mode,
-        max_posts_per_run=positive("MAX_POSTS_PER_RUN", 10),
+        max_posts_per_run=positive("MAX_POSTS_PER_RUN", 30),
+        max_run_seconds=positive("MAX_RUN_SECONDS", 600),
         max_entries_per_feed=positive("MAX_ENTRIES_PER_FEED", 25),
         max_age_hours=positive("MAX_AGE_HOURS", 24), sources=sources, category_ids=categories,
         review_dir=os.getenv("REVIEW_DIR", "./review"))

@@ -9,7 +9,7 @@ from PIL import Image
 from requests import RequestException
 from safe_http import fetch_bytes
 
-IMAGE_POLICY_VERSION = "source-image-v2-600x400"
+IMAGE_POLICY_VERSION = "source-image-v3-article-featured-600x400"
 MIN_IMAGE_WIDTH = 600
 MIN_IMAGE_HEIGHT = 400
 
@@ -24,7 +24,7 @@ def extract_image_url(raw):
     return next(iter(image_candidates(raw)), None)
 
 def image_candidates(raw):
-    urls = []
+    urls = list(raw.get('article_images') or [])
     for key in ("media_content", "media_thumbnail"):
         for item in raw.get(key) or []:
             if item.get("url"):

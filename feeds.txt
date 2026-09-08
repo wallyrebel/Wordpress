@@ -1,43 +1,276 @@
-﻿https://fetchrss.com/feed/1vcaujD2G3c21vcatkBil4m3.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccpR51WAHC.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccqv6Q63xU.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccs7DIv20Q.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcctj5uA2l8.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccum0Dj2Ne.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccwxC4G2AF.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccyMGeG7W6.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vccznGeG7W7.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcd177VRDEB.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcd2xFDTBzm.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcd587ZS6st.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcd689iq9Ap.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcd7T1vE718.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcd8c6qB90k.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdAAGdHBnu.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdBKFl2DhK.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdC45uA2l9.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdDCGeG7W8.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdE7G7M6vF.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdEtE5eC6E.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdHO6AP1zO.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdO708n6KI.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdPB2e2DCN.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vcdQM3gkGry.rss
-https://bmcusports.com/rss.aspx?path=baseball
-https://bmcusports.com/rss.aspx?path=mbball
-https://bmcusports.com/rss.aspx?path=wbball
-https://bmcusports.com/rss.aspx?path=softball
-https://bmcusports.com/rss.aspx?path=vball
-https://bmcusports.com/rss.aspx?path=msoc
-https://bmcusports.com/rss.aspx?path=wsoc
-https://bmcusports.com/rss.aspx?path=mcross
-https://bmcusports.com/rss.aspx?path=wcross
-https://bmcusports.com/rss.aspx?path=mtrack
-https://bmcusports.com/rss.aspx?path=wtrack
-https://fetchrss.com/feed/1vcaujD2G3c21vfgOm7bS9wZ.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vgRa32cwGqA.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vgRbd814AFe.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vgRde3544mM.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vgSqC6rM0Ac.rss
-https://fetchrss.com/feed/1vcaujD2G3c21vgTBo0Y07SU.rss
+# Mississippi News Group: approved publishing sources.
+# All 110 FetchRSS account feeds reconciled on 2026-09-08.
+# Every URL is scanned; only dated stories passing facts, image and taxonomy checks publish.
+# Names are comments; one RSS/Atom URL per non-comment line.
+
+# Previously connected sources
+# Scott County S.O.
 https://fetchrss.com/feed/1vcaujD2G3c21vgnMq7Q85FC.rss
+# Vicksburg Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vgTBo0Y07SU.rss
+# Coahoma County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vgSqC6rM0Ac.rss
+# Hattiesburg Police Department (Official)
+https://fetchrss.com/feed/1vcaujD2G3c21vgRde3544mM.rss
+# Gulfport Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vgRbd814AFe.rss
+# Picayune Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vgRa32cwGqA.rss
+# First Circuit District Attorney's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vfgOm7bS9wZ.rss
+# Oxford MS Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcdQM3gkGry.rss
+# Starkville Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcdPB2e2DCN.rss
+# Lowndes County MS. Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vcdO708n6KI.rss
+# University of Mississippi Medical Center
+https://fetchrss.com/feed/1vcaujD2G3c21vcdHO6AP1zO.rss
+# Crime Stoppers of South Central Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vcdEtE5eC6E.rss
+# Central MS Crime Stoppers
+https://fetchrss.com/feed/1vcaujD2G3c21vcdE7G7M6vF.rss
+# Ocean Springs Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcdDCGeG7W8.rss
+# Mississippi Coast Crime Stoppers
+https://fetchrss.com/feed/1vcaujD2G3c21vcdC45uA2l9.rss
+# Pike County Sheriffs Office - Sheriff Wally Jones
+https://fetchrss.com/feed/1vcaujD2G3c21vcdBKFl2DhK.rss
+# Hinds County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vcdAAGdHBnu.rss
+# Biloxi Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcd8c6qB90k.rss
+# Mississippi Department of Public Safety (Official)
+https://fetchrss.com/feed/1vcaujD2G3c21vcd7T1vE718.rss
+# Booneville Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcd689iq9Ap.rss
+# Crime Stoppers of Northeast Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vcd587ZS6st.rss
+# Mississippi Emergency Management Agency
+https://fetchrss.com/feed/1vcaujD2G3c21vcd2xFDTBzm.rss
+# Southaven Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcd177VRDEB.rss
+# Rankin County Sheriff's Office - MS
+https://fetchrss.com/feed/1vcaujD2G3c21vccznGeG7W7.rss
+# The Yazoo County Sheriff’s Office
+https://fetchrss.com/feed/1vcaujD2G3c21vccyMGeG7W6.rss
+# Jackson Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vccwxC4G2AF.rss
+# Tate Reeves
+https://fetchrss.com/feed/1vcaujD2G3c21vccum0Dj2Ne.rss
+# Mississippi Office of the State Auditor
+https://fetchrss.com/feed/1vcaujD2G3c21vcctj5uA2l8.rss
+# Corinth Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vccs7DIv20Q.rss
+# Lee County Sheriff's Department, Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vccqv6Q63xU.rss
+# Alcorn County Sheriff’s Office
+https://fetchrss.com/feed/1vcaujD2G3c21vccpR51WAHC.rss
+# Tupelo Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcatkBil4m3.rss
+# Blue Mountain Christian University athletics: baseball
+https://bmcusports.com/rss.aspx?path=baseball
+# Blue Mountain Christian University athletics: mbball
+https://bmcusports.com/rss.aspx?path=mbball
+# Blue Mountain Christian University athletics: wbball
+https://bmcusports.com/rss.aspx?path=wbball
+# Blue Mountain Christian University athletics: softball
+https://bmcusports.com/rss.aspx?path=softball
+# Blue Mountain Christian University athletics: vball
+https://bmcusports.com/rss.aspx?path=vball
+# Blue Mountain Christian University athletics: msoc
+https://bmcusports.com/rss.aspx?path=msoc
+# Blue Mountain Christian University athletics: wsoc
+https://bmcusports.com/rss.aspx?path=wsoc
+# Blue Mountain Christian University athletics: mcross
+https://bmcusports.com/rss.aspx?path=mcross
+# Blue Mountain Christian University athletics: wcross
+https://bmcusports.com/rss.aspx?path=wcross
+# Blue Mountain Christian University athletics: mtrack
+https://bmcusports.com/rss.aspx?path=mtrack
+# Blue Mountain Christian University athletics: wtrack
+https://bmcusports.com/rss.aspx?path=wtrack
+
+# Additional FetchRSS account sources
+# Magnolia Shine Podcast
+https://fetchrss.com/feed/1vcaujD2G3c21vpzug4yT20Q.rss
+# Mississippi High School Sports
+https://fetchrss.com/feed/1vcaujD2G3c21vpwrOANoC1a.rss
+# Mississippi High School Sports Page
+https://fetchrss.com/feed/1vcaujD2G3c21vpwqt6XwCPr.rss
+# Blake Levine Sports Reporter
+https://fetchrss.com/feed/1vcaujD2G3c21vpwnFCD02DK.rss
+# Panola County Sheriff's Office- MS
+https://fetchrss.com/feed/1vcaujD2G3c21vhUCBEOX3Ry.rss
+# Batesville - MS Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vhUAy4821K7.rss
+# Mississippi Delta Community College
+https://fetchrss.com/feed/1vcaujD2G3c21vhU814h887q.rss
+# City of Greenwood - Mayor's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vhU0cB847Yx.rss
+# City of Greenville, Mississippi - Government
+https://fetchrss.com/feed/1vcaujD2G3c21vhTyv0Mm73T.rss
+# Washington County Economic Alliance
+https://fetchrss.com/feed/1vcaujD2G3c21vhTy91J68Ys.rss
+# Greenville Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vhTwY9W5Fbn.rss
+# Bolivar County Emergency Operations Center
+https://fetchrss.com/feed/1vcaujD2G3c21vhTvP4821K6.rss
+# Tunica County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vhTuoFBZ8LC.rss
+# Cleveland MS Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vhTu57ktBFq.rss
+# City of Cleveland, Mississippi - A Different Kind of Delta
+https://fetchrss.com/feed/1vcaujD2G3c21vhTtJ3ZGC3e.rss
+# Northwest Rangers Athletics
+https://fetchrss.com/feed/1vcaujD2G3c21vhD7c9TI0MV.rss
+# Landers Center
+https://fetchrss.com/feed/1vcaujD2G3c21vhD52Akw9XH.rss
+# City of Southaven - Municipal Government
+https://fetchrss.com/feed/1vcaujD2G3c21vhD0bCMwAMs.rss
+# Southaven Chamber of Commerce
+https://fetchrss.com/feed/1vcaujD2G3c21vhCxD2CK9GF.rss
+# Northwest Mississippi Community College
+https://fetchrss.com/feed/1vcaujD2G3c21vhCvFAPq3EK.rss
+# Olive Branch Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vhCtnBN10Z8.rss
+# DeSoto Family Theatre
+https://fetchrss.com/feed/1vcaujD2G3c21vhCsg77bAmw.rss
+# Southaven Fire Department
+https://fetchrss.com/feed/1vcaujD2G3c21vhCrnFg5EPi.rss
+# Hernando Main Street Chamber of Commerce
+https://fetchrss.com/feed/1vcaujD2G3c21vhCql2CK9GE.rss
+# Hernando Parks
+https://fetchrss.com/feed/1vcaujD2G3c21vhCpw79HF3y.rss
+# Horn Lake Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vhCnzALf57y.rss
+# City of Olive Branch - Government
+https://fetchrss.com/feed/1vcaujD2G3c21vhCmJ0IyGJO.rss
+# Olive Branch Parks and Recreation
+https://fetchrss.com/feed/1vcaujD2G3c21vhClV2mSEJm.rss
+# Mississippi Department of Human Services
+https://fetchrss.com/feed/1vcaujD2G3c21vhBbG8np6c8.rss
+# Town of Ecru Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vh7nt1zDFam.rss
+# Pontotoc Electric Power Association
+https://fetchrss.com/feed/1vcaujD2G3c21vh7nECOb1qN.rss
+# Town of Ecru
+https://fetchrss.com/feed/1vcaujD2G3c21vh7mX75E8w6.rss
+# Pontotoc County Chamber Main Street
+https://fetchrss.com/feed/1vcaujD2G3c21vh7lo1260by.rss
+# Pontotoc Athletics
+https://fetchrss.com/feed/1vcaujD2G3c21vh7kh8MV2fT.rss
+# Pontotoc Community Theater
+https://fetchrss.com/feed/1vcaujD2G3c21vh7jv1zDFal.rss
+# Pontotoc County Sheriff's Department, Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vh7i87AH0Kz.rss
+# Mississippi Department of Transportation
+https://fetchrss.com/feed/1vcaujD2G3c21vgnHqF4TAaZ.rss
+# Ingomar Attendance Center
+https://fetchrss.com/feed/1vcaujD2G3c21vgnEw6nk5ic.rss
+# Mississippi Department of Revenue
+https://fetchrss.com/feed/1vcaujD2G3c21vgnBZ7wcFrm.rss
+# Lafayette County EMA
+https://fetchrss.com/feed/1vcaujD2G3c21vgn2F3WQ9KM.rss
+# Oxford Charger Booster Club
+https://fetchrss.com/feed/1vcaujD2G3c21vgn1a9hcBJi.rss
+# City of Oxford
+https://fetchrss.com/feed/1vcaujD2G3c21vgmzP4YvDZa.rss
+# Oxford School District
+https://fetchrss.com/feed/1vcaujD2G3c21vgmxPFFOAAU.rss
+# Tupelo Fire Department
+https://fetchrss.com/feed/1vcaujD2G3c21vgkZV4wuCpe.rss
+# Tupelo Community Theatre
+https://fetchrss.com/feed/1vcaujD2G3c21vgkYREaLAte.rss
+# Tupelo Public School District
+https://fetchrss.com/feed/1vcaujD2G3c21vgkX7DmfBnR.rss
+# University of Mississippi - Tupelo
+https://fetchrss.com/feed/1vcaujD2G3c21vgkWTGFD3nu.rss
+# Downtown Tupelo
+https://fetchrss.com/feed/1vcaujD2G3c21vgkUd7FG5je.rss
+# City of Tupelo - Mayor's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vgkTkDmfBnQ.rss
+# Union County School District
+https://fetchrss.com/feed/1vcaujD2G3c21vgZk4BRo7Yh.rss
+# New Albany Main Street Association
+https://fetchrss.com/feed/1vcaujD2G3c21vgZj0Cx18ri.rss
+# New Albany Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vgZgtFMPA6c.rss
+# New Albany School District
+https://fetchrss.com/feed/1vcaujD2G3c21vgZfc0X8EWh.rss
+# Union County Heritage Museum
+https://fetchrss.com/feed/1vcaujD2G3c21vgZevGZFCYM.rss
+# New Albany High School
+https://fetchrss.com/feed/1vcaujD2G3c21vgZdj0Jp5zS.rss
+# New Albany Fire/Rescue
+https://fetchrss.com/feed/1vcaujD2G3c21vgZcMBYf3ne.rss
+# Booneville High School - Booneville, Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vgQpa7W4E67.rss
+# Booneville School District - Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vgQoj9p490W.rss
+# Baldwyn School District
+https://fetchrss.com/feed/1vcaujD2G3c21vgQo05nA1Lx.rss
+# City of Booneville
+https://fetchrss.com/feed/1vcaujD2G3c21vgQn25aq35m.rss
+# Prentiss County Sheriff's Department
+https://fetchrss.com/feed/1vcaujD2G3c21vgQmMDQnBLX.rss
+# Northeast Tiger Athletics
+https://fetchrss.com/feed/1vcaujD2G3c21vgQkh8y8Dwo.rss
+# Mississippi Department of Wildlife, Fisheries, and Parks
+https://fetchrss.com/feed/1vcaujD2G3c21vfoORA4wG0o.rss
+# Amory Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vdUyUCou5ru.rss
+# Northeast Mississippi Community College
+https://fetchrss.com/feed/1vcaujD2G3c21vdUuY5240MW.rss
+# Northeast Mississippi Community College - Adult Education
+https://fetchrss.com/feed/1vcaujD2G3c21vdUu06F62dA.rss
+# Blue Mountain Christian University
+https://fetchrss.com/feed/1vcaujD2G3c21vdUrL5VAA1k.rss
+# City of Ripley, MS
+https://fetchrss.com/feed/1vcaujD2G3c21vdUqd5240MV.rss
+# Ripley Main Street
+https://fetchrss.com/feed/1vcaujD2G3c21vdUps9A70IP.rss
+# US National Weather Service Memphis Tennessee
+https://fetchrss.com/feed/1vcaujD2G3c21vdUpJ5VAA1j.rss
+# Columbus Police Department, MS
+https://fetchrss.com/feed/1vcaujD2G3c21vcyCP2E791G.rss
+# Lafayette County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vcx5mEzl4xf.rss
+# DeSoto County District Attorney's Office
+https://fetchrss.com/feed/1vcaujD2G3c21vcwxo26ADKt.rss
+# DeSoto County Government
+https://fetchrss.com/feed/1vcaujD2G3c21vcwwqEms7Aw.rss
+# Port Gibson Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vcwwB5I21fm.rss
+# City of Meridian-Government
+https://fetchrss.com/feed/1vcaujD2G3c21vcwtK22d6Dr.rss
+# US National Weather Service Jackson Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21vcetH3lhGws.rss
+# Magee Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21vceVC24f7u8.rss
+
+# Direct official athletics and state-agency RSS feeds
+# Mississippi State Athletics
+https://hailstate.com/rss
+# Ole Miss Athletics
+https://olemisssports.com/rss
+# Southern Miss Athletics
+https://southernmiss.com/rss
+# Jackson State Athletics
+https://gojsutigers.com/rss
+# Alcorn State Athletics
+https://alcornsports.com/rss
+# Mississippi Valley State Athletics
+https://mvsusports.com/rss
+# Delta State Athletics
+https://gostatesmen.com/rss
+# Mississippi College Athletics
+https://www.gochoctaws.com/rss
+# Millsaps Athletics
+https://gomajors.com/rss
+# William Carey Athletics
+https://careyathletics.com/rss
+# Mississippi High School Activities Association
+https://www.misshsaa.com/feed/
+# Mississippi Department of Environmental Quality
+https://www.mdeq.ms.gov/feed/

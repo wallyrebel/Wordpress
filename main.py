@@ -41,9 +41,11 @@ def publication_status(article, policy, config, category_ids):
     return "hold"
 
 def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None):
+    started = time.monotonic()
     stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0,
              "duplicates": 0, "source_updates": 0, "model_attempts": 0,
-             "reasons": {}}
+             "reasons": {}, "model_attempt_budget": limit or config.max_posts_per_run,
+             "max_run_seconds": config.max_run_seconds, "feeds_configured": len(config.rss_feeds)}
     store = Store(config.database_path) if not dry_run else None
     client = client or OpenAI(api_key=config.openai_api_key, timeout=90, max_retries=2)
     wp = wp or (None if dry_run else WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password))
@@ -109,7 +111,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 # Legacy receipt is adopted server-side, without republishing old stories.
                 legacy_id = store.legacy_post(entry.guid) if store and not prior.get("post_id") else None
                 if legacy_id:
-                    entry = enrich_entry(entry, policy)
+                    entry = enrich_entry(entry, policy, raw)
                     digest = fingerprint(entry.title, entry.content)
                     receipt = wp.upsert({"source_key": key, "content_hash": digest,
                         "source_url": entry.link, "adopt_post_id": legacy_id})
@@ -125,7 +127,12 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     stats["skipped"] += 1
                     observe(entry, "held", "Source reuse is disabled")
                     continue
-                entry = enrich_entry(entry, policy)
+                if time.monotonic() - started >= config.max_run_seconds:
+                    stats["time_budget_reached"] = True
+                    stats["deferred"] = stats.get("deferred", 0) + 1
+                    observe(entry, "deferred", "Run time budget reached; retry next run")
+                    continue
+                entry = enrich_entry(entry, policy, raw)
                 digest = fingerprint(entry.title, entry.content)
                 if digest in prior.get("versions", {}):
                     if store:
@@ -179,7 +186,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                         repairable = isinstance(exc, ModelOutputError) or str(exc) == "Missing central facts"
                         if (not repairable or item_attempts >= MAX_ITEM_MODEL_ATTEMPTS
                                 or attempted >= (limit or config.max_posts_per_run)
-                                or feed_attempts[entry.feed_url] >= config.max_entries_per_feed):
+                                or feed_attempts[entry.feed_url] >= config.max_entries_per_feed
+                                or time.monotonic() - started >= config.max_run_seconds):
                             raise
                         correction_feedback = str(exc)
                         stats["repair_attempts"] = stats.get("repair_attempts", 0) + 1
@@ -267,6 +275,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
             stats["errors"] += stats["feeds_failed"]
         return stats
     finally:
+        stats["elapsed_seconds"] = round(time.monotonic() - started, 2)
         if store:
             store.close()
         write_json(Path(config.review_dir) / "run-summary.json", stats)
