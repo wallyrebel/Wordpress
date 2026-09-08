@@ -140,6 +140,9 @@ attribution and faithful, specific advice suffice; do not require a new incident
 event date or location that the source never supplied. Do not rewrite."""
 
 def clean_text(value):
+    if "<" not in (value or ""):
+        # A URL-only feed body is literal text, not a request to parse a page.
+        return " ".join(html.unescape(value or "").split())
     soup = BeautifulSoup(value or "", "html.parser")
     for node in soup(["script", "style", "nav", "footer", "form"]):
         node.decompose()

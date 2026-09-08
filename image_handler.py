@@ -9,7 +9,7 @@ from PIL import Image
 from requests import RequestException
 from safe_http import fetch_bytes
 
-IMAGE_POLICY_VERSION = "source-image-v3-article-featured-600x400"
+IMAGE_POLICY_VERSION = "source-image-v4-wordpress-featured-600x400"
 MIN_IMAGE_WIDTH = 600
 MIN_IMAGE_HEIGHT = 400
 

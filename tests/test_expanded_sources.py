@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 from config import SourcePolicy
+from ai_rewriter import InsufficientSource
 from feed_parser import enrich_entry, fetch_feeds_with_raw
 from image_handler import NewsImage, image_candidates
 from main import run_feed_processing, source_key
@@ -40,6 +41,42 @@ class ExpandedSourceTests(unittest.TestCase):
             fetch_feeds_with_raw(['https://example.org/feed'], stats=stats)
         self.assertEqual(stats['feeds_failed'], 1)
 
+    def test_dedicated_sports_feed_keeps_sports_taxonomy_when_model_chooses_community(self):
+        self.cfg.sources[self.entry.feed_url] = SourcePolicy(category='Sports')
+        self.fixture.run_flow()
+        self.assertEqual(self.wp.taxonomy.call_args.args[0], 'Sports')
+        record = json.loads((Path(self.cfg.review_dir)/(source_key(self.entry)+'.json')).read_text())
+        self.assertEqual(record['article']['category'], 'Sports')
+
+    def test_general_source_retains_model_category(self):
+        self.fixture.run_flow()
+        self.assertEqual(self.wp.taxonomy.call_args.args[0], self.article.category)
+
+    def test_civic_alert_title_only_feed_uses_report_without_related_stories(self):
+        html = ('<html><head><meta property="og:image" content="/sheriff.jpg"></head>'
+                '<body><h1>Crime report</h1><div class="article-content redesign-text fr-view">'
+                '<p>The sheriff reported three vehicle thefts over the holiday weekend.</p></div>'
+                '<div class="related-articles">Unrelated old murder investigation</div></body></html>')
+        entry = replace(self.entry, content='')
+        raw = {}
+        with patch('feed_parser.fetch_bytes', return_value=(html.encode(), 'text/html', entry.link)):
+            result = enrich_entry(entry, SourcePolicy(allow_scrape=True, article_hosts=['example.org']), raw)
+        self.assertIn('three vehicle thefts', result.content)
+        self.assertNotIn('murder', result.content)
+        self.assertEqual(raw['article_images'], ['https://example.org/sheriff.jpg'])
+
+    def test_wordpress_uses_own_featured_photo_when_social_preview_is_tiny(self):
+        html = ('<html><head><meta property="og:image" content="/tiny.jpg"></head>'
+                '<body><article><img class="wp-post-image" src="/photo-300.jpg" '
+                'srcset="/photo-300.jpg 300w, /photo-1024.jpg 1024w">'
+                '<div class="entry-content">The department announced the result.</div></article>'
+                '<aside><img src="/unrelated.jpg"></aside></body></html>')
+        raw = {}
+        with patch('feed_parser.fetch_bytes', return_value=(html.encode(), 'text/html', self.entry.link)):
+            enrich_entry(self.entry, SourcePolicy(allow_scrape=True, article_hosts=['example.org']), raw)
+        self.assertEqual(image_candidates(raw)[0], 'https://example.org/photo-1024.jpg')
+        self.assertNotIn('https://example.org/unrelated.jpg', image_candidates(raw))
+
     def test_full_story_survives_outer_aspnet_form_and_uses_source_featured_image(self):
         body = '<p>The college won its opening game. The coach announced the result.</p>' * 15
         html = ('<html><head><meta property="og:image" content="/images/game.jpg"></head>'
@@ -71,7 +108,7 @@ class ExpandedSourceTests(unittest.TestCase):
             enrich_entry(self.entry, SourcePolicy(allow_scrape=True, article_hosts=['other.example']))
         fetch.assert_not_called()
         with patch('feed_parser.fetch_bytes', return_value=(b'<article>Bad redirect</article>', 'text/html', 'https://other.example/story')):
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(InsufficientSource, 'outside approved article hosts'):
                 enrich_entry(self.entry, SourcePolicy(allow_scrape=True, article_hosts=['example.org']))
 
     def test_time_limit_defers_without_permanent_hold_then_publishes_next_run(self):

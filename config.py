@@ -19,6 +19,7 @@ class SourcePolicy:
     article_hosts: list[str] = field(default_factory=list)
     image_reuse_allowed: bool = True
     image_credit: str = ""
+    category: str = ""
 
 @dataclass
 class Config:
@@ -45,6 +46,7 @@ class Config:
         return self.sources.get(feed, SourcePolicy())
 
 def load_config(require_wp=True):
+    from ai_rewriter import CATEGORIES
     load_dotenv(ROOT / ".env")
     required = ["OPENAI_API_KEY"] + (["WP_URL", "WP_USERNAME", "WP_APP_PASSWORD"] if require_wp else [])
     missing = [name for name in required if not os.getenv(name)]
@@ -67,6 +69,8 @@ def load_config(require_wp=True):
                 raise ValueError("Source flags must be JSON booleans")
         if policy.auto_publish and not policy.reuse_allowed:
             raise ValueError("Disabled sources must set auto_publish=false")
+        if not isinstance(policy.category, str) or (policy.category and policy.category not in CATEGORIES):
+            raise ValueError("Source category must be a permitted category name")
         sources[canonical_url(url)] = policy
     mode = os.getenv("PUBLISH_MODE", "auto")
     if mode != "auto":
@@ -77,7 +81,6 @@ def load_config(require_wp=True):
     category_file = ROOT / "category-map.json"
     categories = json.loads(category_file.read_text(encoding="utf-8")) if category_file.exists() else {}
     categories.update(json.loads(os.getenv("CATEGORY_IDS_JSON", "{}")))
-    from ai_rewriter import CATEGORIES
     if any(k not in CATEGORIES or type(v) is not int or v <= 0 for k, v in categories.items()):
         raise ValueError("Category map needs permitted names and positive IDs")
     def positive(name, default):

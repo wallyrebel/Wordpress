@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit, urljoin
 import feedparser
 from bs4 import BeautifulSoup
-from ai_rewriter import clean_text
+from ai_rewriter import clean_text, InsufficientSource
 from safe_http import canonical_url, fetch_bytes
 
 logger = logging.getLogger(__name__)
@@ -107,10 +107,15 @@ def enrich_entry(entry, policy, raw=None):
     if host not in policy.article_hosts:
         return entry
     data, content_type, final_url = fetch_bytes(entry.link)
-    if urlsplit(final_url).hostname not in policy.article_hosts or "html" not in content_type:
-        raise ValueError("Article redirected outside permitted hosts or is not HTML")
+    if urlsplit(final_url).hostname not in policy.article_hosts:
+        # Video-only RSS entries can redirect to YouTube. This is a source
+        # eligibility hold, not a broken feed or publishing service. Do not
+        # broaden the approved hosts or turn video navigation into story facts.
+        raise InsufficientSource("Source page redirects outside approved article hosts; no approved article text")
+    if "html" not in content_type.lower():
+        raise InsufficientSource("Source page is not an HTML article; unsupported document or media")
     soup = BeautifulSoup(data, "html.parser")
-    for selector in ("#storyPageContentBody", ".sidearm-story-template-text", ".article-body",
+    for selector in ("#storyPageContentBody", ".sidearm-story-template-text", ".article-content.redesign-text", ".article-body",
                      ".story-content", ".field--name-body", ".entry-content", "article"):
         node = soup.select_one(selector)
         if node:
@@ -124,6 +129,15 @@ def enrich_entry(entry, policy, raw=None):
     if raw is not None:
         # Use the source page's own featured image when a feed thumbnail fails.
         # Never harvest related-story thumbnails or guess an unrelated photograph.
-        raw['article_images'] = [urljoin(final_url, image['content'])
+        featured_urls = []
+        featured = soup.select_one('article img.wp-post-image')
+        if featured:
+            for candidate in reversed(featured.get('srcset', '').split(',')):
+                if candidate.strip():
+                    featured_urls.append(urljoin(final_url, candidate.strip().split()[0]))
+            for attribute in ('src', 'data-src', 'data-orig-src'):
+                if featured.get(attribute):
+                    featured_urls.append(urljoin(final_url, featured[attribute]))
+        raw['article_images'] = featured_urls + [urljoin(final_url, image['content'])
             for image in soup.select('meta[property="og:image"][content]')[:1]]
     return entry

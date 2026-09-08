@@ -89,6 +89,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
             item_attempts = 0
             image_attempts = 0
             correction_feedback = ""
+            stage = "publication receipt and cache"
             try:
                 cached = store.get(key) if store else None
                 if cached and cached.get("feed_hash") == original_hash:
@@ -111,6 +112,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 # Legacy receipt is adopted server-side, without republishing old stories.
                 legacy_id = store.legacy_post(entry.guid) if store and not prior.get("post_id") else None
                 if legacy_id:
+                    stage = "legacy source enrichment"
                     entry = enrich_entry(entry, policy, raw)
                     digest = fingerprint(entry.title, entry.content)
                     receipt = wp.upsert({"source_key": key, "content_hash": digest,
@@ -132,6 +134,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     stats["deferred"] = stats.get("deferred", 0) + 1
                     observe(entry, "deferred", "Run time budget reached; retry next run")
                     continue
+                stage = "source article enrichment"
                 entry = enrich_entry(entry, policy, raw)
                 digest = fingerprint(entry.title, entry.content)
                 if digest in prior.get("versions", {}):
@@ -164,12 +167,14 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     observe(entry, "deferred", "Per-feed model-attempt budget reached; retry next run")
                     continue
                 image_attempts += 1
+                stage = "source image selection"
                 image = get_source_image(raw, policy, config.image_dir)
                 if not image:
                     raise InsufficientSource("No eligible featured image (minimum 600px wide and 400px high)")
                 # Limit paid model attempts, not deduplication, source updates or
                 # missing-image checks. All publication checks still apply.
                 while True:
+                    stage = "article generation and verification"
                     attempted += 1
                     item_attempts += 1
                     stats["model_attempts"] = attempted
@@ -191,6 +196,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                             raise
                         correction_feedback = str(exc)
                         stats["repair_attempts"] = stats.get("repair_attempts", 0) + 1
+                if policy.category:
+                    article = replace(article, category=policy.category)
                 record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
                           "content_hash": digest, "source_text": clean_text(entry.content),
                           "article": asdict(article)}
@@ -209,6 +216,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     stats["held"] += 1
                     observe(entry, "held", "; ".join(record["reasons"]))
                     continue
+                stage = "WordPress category and tags"
                 category_ids, tag_ids = wp.taxonomy(article.category, article.tags, config.category_ids)
                 status = publication_status(article, policy, config, category_ids)
                 if status != "publish" or not tag_ids:
@@ -221,12 +229,14 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     stats["held"] += 1
                     observe(entry, "held", "; ".join(record["reasons"]))
                     continue
+                stage = "WordPress featured image upload"
                 media_id = wp.upload_media(image, article.headline)
                 if not media_id:
                     raise ValueError("Featured image upload failed")
                 publisher = policy.publisher or "original source"
                 source_line = '<p class="news-source">Source: <a href="' + html.escape(
                     entry.link, quote=True) + '">' + html.escape(publisher) + "</a>.</p>"
+                stage = "WordPress article publication"
                 receipt = wp.upsert({
                     "source_key": key, "content_hash": digest, "source_url": entry.link,
                     "title": article.headline, "content": article.body + source_line,
@@ -235,6 +245,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     "review_reasons": article.review_reasons + ([] if category_ids else ["Category mapping needed"]),
                     "source_published": (entry.published or entry.updated).isoformat(),
                     "evidence": article.evidence})
+                stage = "publication receipt persistence"
                 store.save(key, digest, {**receipt, "feed_hash": original_hash})
                 record["status"], record["receipt"] = receipt["status"], receipt
                 write_json(Path(config.review_dir) / (key + ".json"), record)
@@ -267,10 +278,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
             except Exception as exc:
                 stats["errors"] += 1
                 # Never include HTTP request objects/headers or keys in logs.
-                logger.error("Item held; source=%s error=%s", key[:12], type(exc).__name__)
+                logger.error("Item held; source=%s stage=%s error=%s", key[:12], stage, type(exc).__name__)
                 write_json(Path(config.review_dir) / (key + ".json"),
-                    {"status": "error", "source_url": entry.link, "error_type": type(exc).__name__})
-                observe(entry, "error", type(exc).__name__)
+                    {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__})
+                observe(entry, "error", stage + ": " + type(exc).__name__)
         if stats.get("feeds_failed"):
             stats["errors"] += stats["feeds_failed"]
         return stats
