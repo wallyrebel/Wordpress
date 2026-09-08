@@ -429,15 +429,6 @@
     ],
     "category": "Sports"
   },
-  "https://www.misshsaa.com/feed/": {
-    "publisher": "Mississippi High School Activities Association",
-    "allow_scrape": true,
-    "article_hosts": [
-      "www.misshsaa.com",
-      "misshsaa.com"
-    ],
-    "category": "Sports"
-  },
   "https://www.mdeq.ms.gov/feed/": {
     "publisher": "Mississippi Department of Environmental Quality",
     "allow_scrape": true,
@@ -603,5 +594,13 @@
       "co.jackson.ms.us"
     ],
     "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x40OTAIU62q.rss": {
+    "publisher": "Mississippi High School Activities Association",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true,
+    "category": "Sports"
   }
 }

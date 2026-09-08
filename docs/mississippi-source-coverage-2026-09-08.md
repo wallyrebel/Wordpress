@@ -2,7 +2,7 @@
 
 ## Connected additions
 
-The repository now scans 155 feeds: all 131 feeds in the FetchRSS account plus 24 direct RSS feeds. This pass adds 20 beyond the already-connected Lauderdale and Marion sheriff feeds: eight more sheriff Facebook pages, six city police pages, five state agencies and Jackson County’s native crime-report RSS. Both unsuitable test feeds created during research were removed; none of the original 110 account feeds was removed.
+The repository now scans 155 feeds: all 132 feeds in the FetchRSS account plus 23 direct RSS feeds. This pass adds 20 beyond the already-connected Lauderdale and Marion sheriff feeds: eight more sheriff Facebook pages, six city police pages, five state agencies and Jackson County’s native crime-report RSS. Both unsuitable test feeds created during research were removed; none of the original 110 account feeds was removed.
 
 Activity counts below are observed feed entries, not published articles. FetchRSS exposes at most the latest 25 entries, so 30-day counts can be lower bounds. New pages were cross-checked against official websites and public activity; less frequent sources are identified by their counts. Only eligible, sufficiently sourced stories with an approved featured image, category and tags publish. No drafts are created.
 
@@ -200,3 +200,7 @@ Cities with a government feed can already contribute news even when a dedicated 
 - Two newly created research feeds were unsuitable for connection: Harrison’s cadet program (not the main sheriff news page; latest June 24), and the dormant Randy Tucker page (latest September 25, 2025). Neither is in the article generation list. The correct Harrison sheriff page is connected.
 
 Validation: all 155 configured feeds returned valid RSS/Atom; zero failed in the full preflight. The scan found 89 dated entries within 24 hours, including previously processed items. No paid model calls or WordPress writes were used for this source audit. Scheduled runs still apply their time/attempt budget and publication gates. See the separate September 8 run-failure report for the video-redirect correction.
+
+## MHSAA delivery change after runner verification
+
+The native MHSAA website RSS timed out consistently from GitHub in publishing run 11114 and a separate source-only diagnostic, even after a fresh-connection retry. Local access worked, so local success alone was insufficient validation. The configured MHSAA source now uses its [official Facebook page](https://www.facebook.com/misshsaa), linked by [MHSAA’s website](https://www.misshsaa.com/), through [FetchRSS](https://fetchrss.com/feed/1vcaujD2G3c21x40OTAIU62q.rss). Its latest observed update was September 4, with two posts in seven days and six in 30 days. The sampled update supplied readable text and an eligible source image. It remains routed to Sports. This retains official MHSAA coverage; Facebook updates need not mirror every website entry. The original native RSS remains a documented alternative, not an active connection. Total configured sources remains 155.

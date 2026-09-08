@@ -51,3 +51,12 @@ configured feeds from GitHub without any OpenAI or WordPress credentials/calls,
 so connection problems can be diagnosed without spending on rewriting.
 
 Validation after the retry improvement: 89 offline tests passed.
+
+The [GitHub source-only diagnostic](https://github.com/wallyrebel/Wordpress/actions/runs/34261782704)
+confirmed MHSAA's native site still timed out after both passes, while the other
+154 sources worked. The workflow now uses MHSAA's verified official Facebook
+channel through FetchRSS instead of connecting to that unreachable website RSS.
+The alternate supplied six updates in the past month, readable source text and
+an eligible source photo. Sports routing is retained. The configured total
+remains 155. This retains the organization's official social coverage; it does
+not imply its Facebook page mirrors every website entry.

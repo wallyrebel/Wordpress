@@ -271,7 +271,7 @@ https://gomajors.com/rss
 # William Carey Athletics
 https://careyathletics.com/rss
 # Mississippi High School Activities Association
-https://www.misshsaa.com/feed/
+https://fetchrss.com/feed/1vcaujD2G3c21x40OTAIU62q.rss
 # Mississippi Department of Environmental Quality
 https://www.mdeq.ms.gov/feed/
 
