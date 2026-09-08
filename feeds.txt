@@ -279,3 +279,63 @@ https://www.mdeq.ms.gov/feed/
 https://fetchrss.com/feed/1vcaujD2G3c21x3zElC3f1PW.rss
 # Marion County Sheriff's Office, Mississippi — official Facebook
 https://fetchrss.com/feed/1vcaujD2G3c21x3zG9BdX8Kh.rss
+
+# Byram, MS Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zRR3jiED5.rss
+
+# Calhoun County Sheriff's Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zH52Bp0Ys.rss
+
+# D'Iberville Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zZGAJ31Rq.rss
+
+# Forrest County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21x3zD91rz4bC.rss
+
+# Gautier Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zXZ1UFD4t.rss
+
+# Harrison County Sheriff's Office, Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21x3zVODyo6Bm.rss
+
+# Itawamba County Sheriff's Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zEQ1a66sM.rss
+
+# Kemper County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21x3zIVEpH5Ug.rss
+
+# Long Beach Police Department, Mississippi
+https://fetchrss.com/feed/1vcaujD2G3c21x3zbHC3lAz4.rss
+
+# Madison (MS) Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zNq2yt3ik.rss
+
+# Mississippi Department of Agriculture and Commerce
+https://fetchrss.com/feed/1vcaujD2G3c21x3zjZ2qY9vn.rss
+
+# Mississippi Department of Archives and History
+https://fetchrss.com/feed/1vcaujD2G3c21x3zfj6n9FgB.rss
+
+# Mississippi Department of Corrections
+https://fetchrss.com/feed/1vcaujD2G3c21x3zdw2t8AzK.rss
+
+# Mississippi Development Authority
+https://fetchrss.com/feed/1vcaujD2G3c21x3zh88QQAKJ.rss
+
+# Mississippi State Department of Health
+https://fetchrss.com/feed/1vcaujD2G3c21x3zvYBKHBNK.rss
+
+# Pascagoula Police Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zPx8qNDHW.rss
+
+# Smith County Sheriff's Office
+https://fetchrss.com/feed/1vcaujD2G3c21x3zJ21hH1qs.rss
+
+# Tishomingo County Sheriff's Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zUC9RiAj4.rss
+
+# Winston County MS Sheriff's Department
+https://fetchrss.com/feed/1vcaujD2G3c21x3zN25Y50wM.rss
+
+# Jackson County Sheriff - Crime Reports
+https://www.co.jackson.ms.us/RSSFeed.aspx?ModID=1&CID=Crime-Reports-11

@@ -5,7 +5,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=mbball": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -13,7 +14,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=wbball": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -21,7 +23,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=softball": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -29,7 +32,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=vball": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -37,7 +41,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=msoc": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -45,7 +50,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=wsoc": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -53,7 +59,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=mcross": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -61,7 +68,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=wcross": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -69,7 +77,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=mtrack": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -77,7 +86,8 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://bmcusports.com/rss.aspx?path=wtrack": {
     "publisher": "Blue Mountain Christian University Athletics",
@@ -85,19 +95,23 @@
     "article_hosts": [
       "bmcusports.com",
       "www.bmcusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vpzug4yT20Q.rss": {
     "publisher": "Magnolia Shine Podcast"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vpwrOANoC1a.rss": {
-    "publisher": "Mississippi High School Sports"
+    "publisher": "Mississippi High School Sports",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vpwqt6XwCPr.rss": {
-    "publisher": "Mississippi High School Sports Page"
+    "publisher": "Mississippi High School Sports Page",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vpwnFCD02DK.rss": {
-    "publisher": "Blake Levine Sports Reporter"
+    "publisher": "Blake Levine Sports Reporter",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vhUCBEOX3Ry.rss": {
     "publisher": "Panola County Sheriff's Office- MS"
@@ -133,7 +147,8 @@
     "publisher": "City of Cleveland, Mississippi - A Different Kind of Delta"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vhD7c9TI0MV.rss": {
-    "publisher": "Northwest Rangers Athletics"
+    "publisher": "Northwest Rangers Athletics",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vhD52Akw9XH.rss": {
     "publisher": "Landers Center"
@@ -187,7 +202,8 @@
     "publisher": "Pontotoc County Chamber Main Street"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vh7kh8MV2fT.rss": {
-    "publisher": "Pontotoc Athletics"
+    "publisher": "Pontotoc Athletics",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vh7jv1zDFal.rss": {
     "publisher": "Pontotoc Community Theater"
@@ -208,7 +224,8 @@
     "publisher": "Lafayette County EMA"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vgn1a9hcBJi.rss": {
-    "publisher": "Oxford Charger Booster Club"
+    "publisher": "Oxford Charger Booster Club",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vgmzP4YvDZa.rss": {
     "publisher": "City of Oxford"
@@ -271,7 +288,8 @@
     "publisher": "Prentiss County Sheriff's Department"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vgQkh8y8Dwo.rss": {
-    "publisher": "Northeast Tiger Athletics"
+    "publisher": "Northeast Tiger Athletics",
+    "category": "Sports"
   },
   "https://fetchrss.com/feed/1vcaujD2G3c21vfoORA4wG0o.rss": {
     "publisher": "Mississippi Department of Wildlife, Fisheries, and Parks"
@@ -327,7 +345,8 @@
     "article_hosts": [
       "hailstate.com",
       "www.hailstate.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://olemisssports.com/rss": {
     "publisher": "Ole Miss Athletics",
@@ -335,7 +354,8 @@
     "article_hosts": [
       "olemisssports.com",
       "www.olemisssports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://southernmiss.com/rss": {
     "publisher": "Southern Miss Athletics",
@@ -343,7 +363,8 @@
     "article_hosts": [
       "southernmiss.com",
       "www.southernmiss.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://gojsutigers.com/rss": {
     "publisher": "Jackson State Athletics",
@@ -351,7 +372,8 @@
     "article_hosts": [
       "gojsutigers.com",
       "www.gojsutigers.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://alcornsports.com/rss": {
     "publisher": "Alcorn State Athletics",
@@ -359,7 +381,8 @@
     "article_hosts": [
       "alcornsports.com",
       "www.alcornsports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://mvsusports.com/rss": {
     "publisher": "Mississippi Valley State Athletics",
@@ -367,7 +390,8 @@
     "article_hosts": [
       "mvsusports.com",
       "www.mvsusports.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://gostatesmen.com/rss": {
     "publisher": "Delta State Athletics",
@@ -375,7 +399,8 @@
     "article_hosts": [
       "gostatesmen.com",
       "www.gostatesmen.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://www.gochoctaws.com/rss": {
     "publisher": "Mississippi College Athletics",
@@ -383,7 +408,8 @@
     "article_hosts": [
       "www.gochoctaws.com",
       "gochoctaws.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://gomajors.com/rss": {
     "publisher": "Millsaps Athletics",
@@ -391,7 +417,8 @@
     "article_hosts": [
       "gomajors.com",
       "www.gomajors.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://careyathletics.com/rss": {
     "publisher": "William Carey Athletics",
@@ -399,7 +426,8 @@
     "article_hosts": [
       "careyathletics.com",
       "www.careyathletics.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://www.misshsaa.com/feed/": {
     "publisher": "Mississippi High School Activities Association",
@@ -407,7 +435,8 @@
     "article_hosts": [
       "www.misshsaa.com",
       "misshsaa.com"
-    ]
+    ],
+    "category": "Sports"
   },
   "https://www.mdeq.ms.gov/feed/": {
     "publisher": "Mississippi Department of Environmental Quality",
@@ -429,6 +458,150 @@
     "reuse_allowed": true,
     "auto_publish": true,
     "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zRR3jiED5.rss": {
+    "publisher": "Byram, MS Police Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zH52Bp0Ys.rss": {
+    "publisher": "Calhoun County Sheriff's Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zZGAJ31Rq.rss": {
+    "publisher": "D'Iberville Police Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zD91rz4bC.rss": {
+    "publisher": "Forrest County Sheriff's Office",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zXZ1UFD4t.rss": {
+    "publisher": "Gautier Police Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zVODyo6Bm.rss": {
+    "publisher": "Harrison County Sheriff's Office, Mississippi",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zEQ1a66sM.rss": {
+    "publisher": "Itawamba County Sheriff's Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zIVEpH5Ug.rss": {
+    "publisher": "Kemper County Sheriff's Office",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zbHC3lAz4.rss": {
+    "publisher": "Long Beach Police Department, Mississippi",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zNq2yt3ik.rss": {
+    "publisher": "Madison (MS) Police Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zjZ2qY9vn.rss": {
+    "publisher": "Mississippi Department of Agriculture and Commerce",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zfj6n9FgB.rss": {
+    "publisher": "Mississippi Department of Archives and History",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zdw2t8AzK.rss": {
+    "publisher": "Mississippi Department of Corrections",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zh88QQAKJ.rss": {
+    "publisher": "Mississippi Development Authority",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zvYBKHBNK.rss": {
+    "publisher": "Mississippi State Department of Health",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zPx8qNDHW.rss": {
+    "publisher": "Pascagoula Police Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zJ21hH1qs.rss": {
+    "publisher": "Smith County Sheriff's Office",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zUC9RiAj4.rss": {
+    "publisher": "Tishomingo County Sheriff's Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://fetchrss.com/feed/1vcaujD2G3c21x3zN25Y50wM.rss": {
+    "publisher": "Winston County MS Sheriff's Department",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": false,
+    "image_reuse_allowed": true
+  },
+  "https://www.co.jackson.ms.us/RSSFeed.aspx?CID=Crime-Reports-11&ModID=1": {
+    "publisher": "Jackson County Sheriff's Department, Mississippi",
+    "reuse_allowed": true,
+    "auto_publish": true,
+    "allow_scrape": true,
+    "article_hosts": [
+      "www.co.jackson.ms.us",
+      "co.jackson.ms.us"
+    ],
     "image_reuse_allowed": true
   }
 }
