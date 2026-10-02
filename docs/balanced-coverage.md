@@ -47,3 +47,11 @@ the same compilation date can pass the exact-headline publication check.
 The two-hour schedule and default eight-pipeline budget remain. Run artifacts
 show full articles, briefs, roundups, previews and holds separately. Review a
 live dry run before deployment and inspect resulting articles after publication.
+
+Feed availability is separate from article processing errors. An isolated source
+outage remains visible in the job warning, per-feed table and review artifact,
+and is retried on the next run. It does not fail the publishing job when at least
+90% of configured feeds were read successfully. Coverage below 90%, any article
+processing error, or a setup/WordPress connection failure still fails the job.
+The dedicated source-connectivity workflow remains strict: any unavailable feed
+fails that diagnostic check. No sources are removed or publication checks relaxed.

@@ -12,7 +12,7 @@ def cell(value):
 def render_report(stats, items):
     lines = ['## RSS publishing report', '',
         f"Published: **{stats.get('created', 0)}** · Model attempts: **{stats.get('model_attempts', 0)}** · "
-        f"Items needing attention or retry: **{stats.get('attention_required', 0)}** · Errors: **{stats.get('errors', 0)}**", '',
+        f"Items needing attention or retry: **{stats.get('attention_required', 0)}** · Processing errors: **{stats.get('errors', 0)}**", '',
         f"Verified previews: **{stats.get('previews', 0)}** · Full articles published: **{stats.get('full_created', 0)}** · "
         f"Public-service briefs published: **{stats.get('brief_created', 0)}** · Multi-source briefings published: **{stats.get('roundups_created', 0)}**", '',
         f"Feeds configured: **{stats.get('feeds_configured', len(stats.get('feeds', {})))}** · "
@@ -20,6 +20,10 @@ def render_report(stats, items):
         f"Deferred: **{stats.get('deferred', 0)}** · Model-attempt limit: **{stats.get('model_attempt_budget', 'unknown')}**", '',
         f"Sources retried after a connection error: **{stats.get('feeds_retried', 0)}** · "
         f"Recovered on retry: **{stats.get('feeds_recovered', 0)}**", '',
+        ('**Feed coverage failure:** fewer than 90% of configured sources were read. The job fails; healthy sources were still processed.'
+         if stats.get('feed_coverage_failed') else
+         '**Partial source outage:** unavailable feeds remain listed below and retry next run. At least 90% of sources were read; this alone does not fail publishing.'
+         if stats.get('feed_health') == 'degraded' else 'Source read results are listed below.'), '',
         '### Feed coverage', '', '| Source | Read | Eligible | Published / included | Previewed / included | Already processed | Held / retry | Deferred | Old / undated / invalid |',
         '|---|---|---:|---:|---:|---:|---:|---:|---:|']
     for url, feed in stats.get('feeds', {}).items():

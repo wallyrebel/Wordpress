@@ -25,6 +25,25 @@ logger = logging.getLogger(__name__)
 MAX_ITEM_MODEL_ATTEMPTS = 2
 MAX_IMAGE_ATTEMPTS = 3
 IMAGE_RETRY_SECONDS = 1800
+MIN_FEED_COVERAGE_PERCENT = 90
+
+def apply_feed_health(stats):
+    """Report isolated source outages without disguising a wider coverage failure."""
+    successful = stats.get("feeds_ok", 0)
+    failed = stats.get("feeds_failed", 0)
+    total = stats.get("feeds_configured", successful + failed)
+    if not failed:
+        return
+    stats["feed_coverage_percent"] = round(100 * successful / total, 2) if total else 0
+    stats["feed_coverage_failed"] = not total or successful * 100 < total * MIN_FEED_COVERAGE_PERCENT
+    stats["feed_health"] = "failed" if stats["feed_coverage_failed"] else "degraded"
+    logger.warning("Feed coverage: %s/%s sources read; %s unavailable after retry. %s",
+                   successful, total, failed,
+                   "Below the 90% minimum." if stats["feed_coverage_failed"]
+                   else "Healthy sources processed; unavailable sources will retry next run.")
+
+def run_exit_code(stats):
+    return 1 if stats.get("errors") or stats.get("feed_coverage_failed") else 0
 
 def write_json(path, data):
     path = Path(path)
@@ -321,8 +340,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 observe(entry, "error", reason)
         if roundup_candidates:
             run_roundup(config, roundup_candidates, stats, started, dry_run, client, wp, store, observe)
-        if stats.get("feeds_failed"):
-            stats["errors"] += stats["feeds_failed"]
+        apply_feed_health(stats)
         return stats
     finally:
         stats["elapsed_seconds"] = round(time.monotonic() - started, 2)
@@ -463,7 +481,7 @@ def main():
         while True:
             stats = run_feed_processing(config, args.dry_run, args.max_items)
             if not args.schedule:
-                return 1 if stats["errors"] else 0
+                return run_exit_code(stats)
             time.sleep(config.poll_interval_minutes * 60)
     except KeyboardInterrupt:
         return 0
