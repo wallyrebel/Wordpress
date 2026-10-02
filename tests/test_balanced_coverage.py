@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+from pydantic import ValidationError
 from ai_rewriter import (Extraction, Verification, InsufficientSource, ModelOutputError,
     rewrite_article, validate_publication_article, editorial_format)
 from ai_rewriter import numeric_tokens
@@ -66,6 +67,23 @@ class BalancedCoverageTests(unittest.TestCase):
         self.assertNotEqual(numeric_tokens('10/8'), numeric_tokens('Nov. 8'))
         self.assertNotEqual(numeric_tokens('10/8'), numeric_tokens('Oct. 9'))
         self.assertEqual(numeric_tokens('601-555-0108; 10:08am'), {'601-555-0108','10:08'})
+        self.assertEqual(numeric_tokens('October 26-November 1'), numeric_tokens('Oct. 26 and Nov. 1'))
+        self.assertEqual(numeric_tokens('10/26-11/1'), numeric_tokens('Oct. 26 through Nov. 1'))
+        self.assertNotEqual(numeric_tokens('10/26-11/1'), numeric_tokens('Oct. 25 through Nov. 1'))
+
+    def test_source_names_cannot_replace_fact_ids_in_model_schema(self):
+        data = fixtures.packet().model_dump()
+        data['five_ws']['who'] = ['Mississippi State', 'South Carolina']
+        with self.assertRaises(ValidationError):
+            Extraction.model_validate(data)
+        schema = Extraction.model_json_schema()
+        self.assertEqual(schema['$defs']['FiveWs']['properties']['who']['items']['pattern'], '^f[1-9][0-9]*$')
+        # Even a well-formed ID must refer to an existing fact before publication.
+        p = fixtures.packet()
+        p.five_ws.who = ['f999']
+        from ai_rewriter import check_completeness
+        with self.assertRaisesRegex(ModelOutputError,'Unknown five-W'):
+            check_completeness(p)
 
     def test_verified_brief_publishes_without_a_photo(self):
         fixture = fixtures.PublishingTests()

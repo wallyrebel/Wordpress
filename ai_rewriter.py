@@ -4,34 +4,36 @@ import html
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Annotated, Literal
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v10-balanced-coverage-3"
+PROMPT_VERSION = "evidence-v10-balanced-coverage-4"
 # Editorial floors for automatic publication, not Google ranking requirements.
 MIN_SOURCE_WORDS = 180
 MIN_ARTICLE_WORDS = 300
 MIN_FACTS = 7
 MIN_PARAGRAPHS = 4
+FactId = Annotated[str, Field(pattern=r'^f[1-9][0-9]*$',
+    description='An ID from this extraction facts list, such as f1. Never a name or prose.')]
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 class Fact(StrictModel):
-    id: str
+    id: FactId
     statement: str
     evidence: str
 
 class FiveWs(StrictModel):
-    who: list[str]
-    what: list[str]
-    where: list[str]
-    when: list[str]
-    why: list[str]
+    who: list[FactId]
+    what: list[FactId]
+    where: list[FactId]
+    when: list[FactId]
+    why: list[FactId]
 
 class Extraction(StrictModel):
     mississippi_relevant: bool
@@ -46,11 +48,11 @@ class Extraction(StrictModel):
 
 class Paragraph(StrictModel):
     text: str
-    fact_ids: list[str]
+    fact_ids: list[FactId]
 
 class Draft(StrictModel):
     headline: str
-    headline_fact_ids: list[str]
+    headline_fact_ids: list[FactId]
     paragraphs: list[Paragraph]
     excerpt: str
 
@@ -327,7 +329,7 @@ def numeric_tokens(value):
                    r"Nov(?:ember)?|Dec(?:ember)?)\.?\s+(0?[1-9]|[12]\d|3[01])\b",
         lambda m: f"{months[m.group(1)[:3].lower()]}/{int(m.group(2))}", value, flags=re.I)
     value = re.sub(r"\b(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])\b",
-                   lambda m: f"{int(m.group(1))}/{int(m.group(2))}", value)
+                   lambda m: f" {int(m.group(1))}/{int(m.group(2))} ", value)
     # Police releases often join the meridiem to the time ("1:56am"). Without
     # a boundary, the numeric regex backtracks and reads that as just "1".
     value = re.sub(r"(?<=\d)(?=[ap]\.?m\.?(?:\b|$))", " ", value, flags=re.I)
