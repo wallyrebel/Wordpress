@@ -87,6 +87,7 @@ evidence. Copy the excerpt itself without adding quotation marks around it.
 Prefer one event detail per fact, not the entire article in one fact.
 Capture all material details needed for a complete article, including relevant
 results, dates, locations, participants, source-stated context and next steps.
+For sports coverage, retain the sport or discipline when the source establishes it.
 Preserve attribution, allegations, uncertainty, dates and numbers.
 Assess whether there is enough substantive information for a useful full article.
 Return five_ws as supporting fact IDs for who, what, where, when and why.
@@ -141,6 +142,8 @@ Use 4-8 useful paragraphs and cover every supplied five_ws answer in the body.
 Do not add statements about information being unavailable or not
 released (such as 'no additional details') unless the source explicitly says so.
 Lead with the main development; retain attribution and allegation qualifiers.
+For sports coverage, explicitly name the source-established sport in the headline
+or opening sentence. Team names and a generic word like 'match' are not enough.
 Write entirely in natural English, using AP-style prose. Do not keyword-stuff Mississippi or claim independent
 reporting. Summarize the story in your own words. When including a direct
 quotation, copy its wording EXACTLY from source_text and attribute it to the
@@ -169,6 +172,8 @@ summarized, not substantially copied.
 A fact-id reference alone is NOT evidence. supported=true only if ALL claims are
 supported. Also reject if the reader cannot identify the central event, its
 participants or relevant location/time from the draft. Set quality_passed=true
+For a sports story, readers must be able to identify the sport from the headline
+or opening sentence when it is supplied by the source.
 ONLY if the body meaningfully answers who, what, where, when and why using the
 source, adds useful detail without padding, and establishes Mississippi relevance.
 Why may be the source-stated purpose or public impact, never an invented motive.
