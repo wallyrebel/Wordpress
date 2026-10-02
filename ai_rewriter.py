@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v10-balanced-coverage-2"
+PROMPT_VERSION = "evidence-v10-balanced-coverage-3"
 # Editorial floors for automatic publication, not Google ranking requirements.
 MIN_SOURCE_WORDS = 180
 MIN_ARTICLE_WORDS = 300
@@ -353,8 +353,12 @@ def rewrite_article(title, content, link, openai_client, *,
     if format == "brief" and (word_count(source) < 45 or len(source) > max_source_chars):
         raise InsufficientSource("Brief source lacks enough text or exceeds source limit")
     usage = []
+    extract_prompt = EXTRACT_PROMPT
+    if format == 'brief':
+        extract_prompt = extract_prompt.replace('useful full article', 'useful public-service brief of 70-250 words')
+        extract_prompt += '\nAssess substantive for this BRIEF format: four distinct actionable facts can be enough. A dated free community event with location and participation details is useful service information, not merely an advertisement. Keep when/where explicit; never invent missing facts.'
     extraction = _call(openai_client, extraction_model, "low", Extraction,
-        EXTRACT_PROMPT, {"title": title, "source_text": source, "source_url": link,
+        extract_prompt, {"title": title, "source_text": source, "source_url": link,
         "publisher": publisher, "source_date": source_date,
         "approved_primary_source": approved_primary_source,
         "previous_validation_error": correction_feedback[:2000]}, 3500, usage)

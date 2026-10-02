@@ -377,6 +377,7 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
             counts[entry.feed_url] = counts.get(entry.feed_url,0)+1
             sources.append({'source_id':source_key(entry),'url':entry.link,'title':entry.title,
                 'publisher':policy.publisher,'source_date':(entry.published or entry.updated).isoformat(),
+                'approved_primary_source':policy.reuse_allowed and policy.auto_publish,
                 'text':clean_text(entry.content)})
             if len(selected) == 6:
                 break
