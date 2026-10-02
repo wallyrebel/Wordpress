@@ -171,10 +171,10 @@ when copied exactly from the source and clearly attributed. The rest should be
 summarized, not substantially copied.
 A fact-id reference alone is NOT evidence. supported=true only if ALL claims are
 supported. Also reject if the reader cannot identify the central event, its
-participants or relevant location/time from the draft. Set quality_passed=true
+participants or relevant location/time from the draft.
 For a sports story, readers must be able to identify the sport from the headline
 or opening sentence when it is supplied by the source.
-ONLY if the body meaningfully answers who, what, where, when and why using the
+Set quality_passed=true ONLY if the body meaningfully answers who, what, where, when and why using the
 source, adds useful detail without padding, and establishes Mississippi relevance.
 Why may be the source-stated purpose or public impact, never an invented motive.
 An unknown cause alone does not answer why the story matters. Reject repetitive
