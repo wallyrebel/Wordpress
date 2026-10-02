@@ -2,6 +2,7 @@
 import html
 import re
 from pathlib import Path
+from bs4 import BeautifulSoup
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -68,6 +69,19 @@ class WordPressAPI:
                 return None
             page += 1
         raise ValueError("Duplicate search exceeds bounded review limit")
+
+    def find_source_publication(self, source_url):
+        """Recover a member receipt from visible, exact source attribution links."""
+        for page in range(1, 6):
+            posts = self.request('GET','wp/v2/posts',params={'search':source_url,
+                'per_page':100,'page':page,'status':'publish','_fields':'id,content'})
+            for post in posts:
+                soup = BeautifulSoup(post['content']['rendered'],'html.parser')
+                if any(a.get('href') == source_url for a in soup.select('.news-source a')):
+                    return post['id']
+            if len(posts) < 100:
+                return None
+        raise ValueError('Source coverage search exceeds bounded review limit')
 
     def create_or_get_tag(self, tag):
         try:

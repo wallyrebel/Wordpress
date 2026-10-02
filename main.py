@@ -12,13 +12,14 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from openai import OpenAI
-from ai_rewriter import (rewrite_article, fingerprint, clean_text, check_source_length,
+from ai_rewriter import (rewrite_article, fingerprint, clean_text, check_source_length, editorial_format, word_count,
                          validate_publication_article, InsufficientSource, ModelOutputError, PROMPT_VERSION)
 from config import load_config
 from database import Store
 from feed_parser import fetch_feeds_with_raw, enrich_entry
 from image_handler import get_source_image, IMAGE_POLICY_VERSION
 from wordpress_api import WordPressAPI, safe_http_details
+from roundups import rewrite_roundup
 
 logger = logging.getLogger(__name__)
 MAX_ITEM_MODEL_ATTEMPTS = 2
@@ -69,11 +70,14 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
         entries = fetch_feeds_with_raw(config.rss_feeds, config.max_entries_per_feed,
                                        config.max_age_hours, stats)
         # A fixed feed-list order let earlier busy sources starve later sources.
-        entries.sort(key=lambda item: item[0].updated or item[0].published
-                     or datetime.max.replace(tzinfo=timezone.utc))
+        entries.sort(key=lambda item: (editorial_format(item[0].content) != 'brief',
+                     item[0].published or item[0].updated or datetime.max.replace(tzinfo=timezone.utc)))
+        roundup_possible = sum(35 <= word_count(e.content) < 180 and editorial_format(e.content) == 'roundup'
+                               for e,_ in entries) >= 3
         seen = set()
         attempted = 0
         feed_attempts = {}
+        roundup_candidates = []
         for entry, raw in entries:
             key = source_key(entry)
             if key in seen:
@@ -160,8 +164,18 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     continue
                 # Thin sources must not consume images/model budget and hide better items.
                 stage = "source quality gate"
-                check_source_length(entry.content)
-                if attempted >= (limit or config.max_posts_per_run):
+                format = editorial_format(entry.content)
+                if format == "roundup":
+                    if word_count(entry.content) >= 35 and policy.auto_publish:
+                        roundup_candidates.append((entry, raw, policy, original_hash, digest))
+                        continue
+                    check_source_length(entry.content)
+                if format == "full":
+                    check_source_length(entry.content)
+                total_budget = limit or config.max_posts_per_run
+                # Reserve one bounded pipeline for combining useful smaller items.
+                standalone_budget = max(1, total_budget - int(roundup_possible))
+                if attempted >= standalone_budget:
                     stats["budget_reached"] = True
                     stats["deferred"] = stats.get("deferred", 0) + 1
                     observe(entry, "deferred", "Run model-attempt budget reached; retry next run")
@@ -189,12 +203,12 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                             publisher=policy.publisher,
                             source_date=(entry.published or entry.updated).isoformat(),
                             approved_primary_source=policy.reuse_allowed and policy.auto_publish,
-                            correction_feedback=correction_feedback)
+                            correction_feedback=correction_feedback, format=format)
                         break
                     except (ModelOutputError, InsufficientSource) as exc:
                         repairable = isinstance(exc, ModelOutputError) or str(exc) == "Missing central facts"
                         if (not repairable or item_attempts >= MAX_ITEM_MODEL_ATTEMPTS
-                                or attempted >= (limit or config.max_posts_per_run)
+                                or attempted >= standalone_budget
                                 or feed_attempts[entry.feed_url] >= config.max_entries_per_feed
                                 or time.monotonic() - started >= config.max_run_seconds):
                             raise
@@ -209,6 +223,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 write_json(Path(config.review_dir) / (key + ".json"), record)
                 if dry_run:
                     stats["previews"] += 1
+                    stats[format + '_previews'] = stats.get(format + '_previews',0)+1
                     observe(entry, "preview")
                     continue
                 if article.requires_review or not policy.auto_publish:
@@ -265,6 +280,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 record["status"], record["receipt"] = receipt["status"], receipt
                 write_json(Path(config.review_dir) / (key + ".json"), record)
                 stats["created"] += 1
+                stats[format + '_created'] = stats.get(format + '_created',0)+1
                 observe(entry, "publish")
             except InsufficientSource as exc:
                 stats["skipped"] += 1
@@ -303,6 +319,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 write_json(Path(config.review_dir) / (key + ".json"),
                     {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__, **details})
                 observe(entry, "error", reason)
+        if roundup_candidates:
+            run_roundup(config, roundup_candidates, stats, started, dry_run, client, wp, store, observe)
         if stats.get("feeds_failed"):
             stats["errors"] += stats["feeds_failed"]
         return stats
@@ -313,6 +331,107 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
         write_json(Path(config.review_dir) / "run-summary.json", stats)
         write_json(Path(config.review_dir) / "run-items.json", outcomes)
         logger.info("Run summary: %s", json.dumps(stats))
+
+
+def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, observe):
+    """Combine smaller items, with durable per-source deduplication and a shared budget."""
+    selected = []
+    sources = []
+    key = None
+    reported = set()
+    def report(entry,status,reason):
+        reported.add(source_key(entry))
+        observe(entry,status,reason)
+    try:
+        if stats['model_attempts'] >= stats['model_attempt_budget'] or time.monotonic()-started >= config.max_run_seconds:
+            raise InsufficientSource('Roundup deferred until next run: processing budget reached')
+        # Prefer enough factual material; cap each feed's contribution for source diversity.
+        counts = {}
+        for item in sorted(candidates, key=lambda c: (-word_count(c[0].content), c[0].link)):
+            if time.monotonic()-started >= config.max_run_seconds:
+                raise InsufficientSource('Roundup deferred until next run: processing budget reached')
+            entry, raw, policy, original_hash, digest = item
+            if counts.get(entry.feed_url,0) >= 2:
+                continue
+            if wp:
+                # Recover coverage even if a runner died between publishing a roundup
+                # and recording all member receipts, or the local DB was lost.
+                covered = wp.find_source_publication(entry.link)
+                if covered:
+                    receipt = wp.upsert({'source_key':source_key(entry),'content_hash':digest,
+                        'source_url':entry.link,'adopt_post_id':covered})
+                    store.save(source_key(entry),digest,{**receipt,'feed_hash':original_hash})
+                    stats['duplicates'] += 1
+                    report(entry,'duplicate','Source already included in a published story or briefing')
+                    continue
+            selected.append(item)
+            counts[entry.feed_url] = counts.get(entry.feed_url,0)+1
+            sources.append({'source_id':source_key(entry),'url':entry.link,'title':entry.title,
+                'publisher':policy.publisher,'source_date':(entry.published or entry.updated).isoformat(),
+                'text':clean_text(entry.content)})
+            if len(selected) == 6:
+                break
+        if len(selected) < 3 or sum(word_count(s['text']) for s in sources) < 250:
+            raise InsufficientSource('Roundup waiting for at least three useful items and 250 source words')
+        key = hashlib.sha256(('roundup:'+','.join(sorted(s['source_id'] for s in sources))).encode()).hexdigest()
+        stats['model_attempts'] += 1
+        stats['roundup_attempts'] = stats.get('roundup_attempts',0)+1
+        article = rewrite_roundup(sources,client,config.extraction_model,config.drafting_model)
+        validate_publication_article(article)
+        used = {s['source_id'] for s in article.evidence['sources']}
+        included = [item for item in selected if source_key(item[0]) in used]
+        record = {'status':'preview','article':asdict(article),'source_urls':[s['url'] for s in article.evidence['sources']]}
+        write_json(Path(config.review_dir)/(key+'.json'),record)
+        if dry_run:
+            stats['previews'] += 1
+            stats['roundup_previews'] = stats.get('roundup_previews',0)+1
+            for entry,*_ in included:
+                report(entry,'preview','Included in verified multi-source briefing')
+            return
+        if wp.find_duplicate_headline(article.headline):
+            raise InsufficientSource('A briefing for this section and compilation date is already published')
+        image = next((found for _,raw,policy,_,_ in included
+                      if (found := get_source_image(raw,policy,config.image_dir))),None)
+        if not image:
+            raise InsufficientSource('Roundup lacks an eligible image from an included source')
+        category_ids, tag_ids = wp.taxonomy(article.category,article.tags,config.category_ids)
+        if not category_ids or not tag_ids:
+            raise InsufficientSource('Roundup category or supported tags missing')
+        media_id = wp.upload_media(image,article.headline)
+        if not media_id:
+            raise ValueError('Roundup featured image upload failed')
+        digest = fingerprint(article.headline,json.dumps(article.evidence['sources'],sort_keys=True))
+        receipt = wp.upsert({'source_key':key,'content_hash':digest,'source_url':included[0][0].link,
+            'title':article.headline,'content':article.body,'excerpt':article.excerpt,'status':'publish',
+            'categories':category_ids,'tags':tag_ids,'featured_media':media_id,'review_reasons':[],
+            'source_published':(included[0][0].published or included[0][0].updated).isoformat(),
+            'evidence':article.evidence})
+        stats['created'] += 1
+        stats['roundups_created'] = stats.get('roundups_created',0)+1
+        record.update(status='publish',receipt=receipt)
+        write_json(Path(config.review_dir)/(key+'.json'),record)
+        for entry,_,_,original_hash,member_digest in included:
+            adopted = wp.upsert({'source_key':source_key(entry),'content_hash':member_digest,
+                'source_url':entry.link,'adopt_post_id':receipt['post_id']})
+            store.save(source_key(entry),member_digest,{**adopted,'feed_hash':original_hash})
+            report(entry,'publish','Included in multi-source briefing')
+    except (InsufficientSource,ModelOutputError) as exc:
+        stats['roundup_holds'] = stats.get('roundup_holds',0)+1
+        stats['reasons'][str(exc)] = stats['reasons'].get(str(exc),0)+1
+        for entry,*_ in selected or candidates:
+            report(entry,'roundup_pending',str(exc))
+        if key:
+            write_json(Path(config.review_dir)/(key+'.json'),{'status':'roundup_pending','reason':str(exc)})
+    except Exception as exc:
+        stats['errors'] += 1
+        logger.error('Roundup held: %s',type(exc).__name__)
+        for entry,*_ in selected or candidates:
+            report(entry,'error','Roundup pipeline: '+type(exc).__name__)
+    finally:
+        for entry,*_ in candidates:
+            if source_key(entry) not in reported:
+                stats['deferred'] = stats.get('deferred',0)+1
+                observe(entry,'roundup_pending','Not selected for this briefing; reconsider while source remains current')
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

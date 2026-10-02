@@ -13,13 +13,15 @@ def render_report(stats, items):
     lines = ['## RSS publishing report', '',
         f"Published: **{stats.get('created', 0)}** · Model attempts: **{stats.get('model_attempts', 0)}** · "
         f"Items needing attention or retry: **{stats.get('attention_required', 0)}** · Errors: **{stats.get('errors', 0)}**", '',
+        f"Verified previews: **{stats.get('previews', 0)}** · Full articles published: **{stats.get('full_created', 0)}** · "
+        f"Public-service briefs published: **{stats.get('brief_created', 0)}** · Multi-source briefings published: **{stats.get('roundups_created', 0)}**", '',
         f"Feeds configured: **{stats.get('feeds_configured', len(stats.get('feeds', {})))}** · "
         f"Read successfully: **{stats.get('feeds_ok', 0)}** · Failed: **{stats.get('feeds_failed', 0)}** · "
         f"Deferred: **{stats.get('deferred', 0)}** · Model-attempt limit: **{stats.get('model_attempt_budget', 'unknown')}**", '',
         f"Sources retried after a connection error: **{stats.get('feeds_retried', 0)}** · "
         f"Recovered on retry: **{stats.get('feeds_recovered', 0)}**", '',
-        '### Feed coverage', '', '| Source | Read | Eligible | Published | Already processed | Held / retry | Deferred | Old / undated / invalid |',
-        '|---|---|---:|---:|---:|---:|---:|---:|']
+        '### Feed coverage', '', '| Source | Read | Eligible | Published / included | Previewed / included | Already processed | Held / retry | Deferred | Old / undated / invalid |',
+        '|---|---|---:|---:|---:|---:|---:|---:|---:|']
     for url, feed in stats.get('feeds', {}).items():
         outcomes = feed.get('outcomes', {})
         holds = sum(count for status, count in outcomes.items()
@@ -27,7 +29,7 @@ def render_report(stats, items):
         rejected = sum(feed.get(key, 0) for key in ('stale', 'undated_or_future', 'invalid'))
         source = cell(feed.get('publisher') or url)
         lines.append(f"| {source}<br>{cell(url)} | {cell(feed.get('error_type') or feed.get('status', 'unknown'))} | "
-            f"{feed.get('eligible', 0)} | {outcomes.get('publish', 0)} | {outcomes.get('duplicate', 0)} | {holds} | {outcomes.get('deferred', 0)} | {rejected} |")
+            f"{feed.get('eligible', 0)} | {outcomes.get('publish', 0)} | {outcomes.get('preview', 0)} | {outcomes.get('duplicate', 0)} | {holds} | {outcomes.get('deferred', 0)} | {rejected} |")
     attention = [item for item in items if item.get('status') not in ('publish', 'preview', 'duplicate')]
     if attention:
         lines += ['', '### Items needing attention or retry', '', '| Source item | Outcome | Reason |', '|---|---|---|']

@@ -1,0 +1,162 @@
+import copy
+import unittest
+from dataclasses import replace
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+from ai_rewriter import (Extraction, Verification, InsufficientSource, ModelOutputError,
+    rewrite_article, validate_publication_article, editorial_format)
+from roundups import (RoundupExtraction, ExtractedSection, RoundupDraft, WrittenSection,
+    rewrite_roundup, validate_sections)
+from main import run_feed_processing, run_roundup, source_key
+from wordpress_api import WordPressAPI
+import test_workflow as fixtures
+
+
+def bundle():
+    sources, packets, drafts = [], [], []
+    for i, city in enumerate(['Tupelo','Oxford','Corinth']):
+        text = (fixtures.SOURCE.split(fixtures.DETAILS[1])[0]).strip().replace('Tupelo',city)
+        p = fixtures.packet()
+        p.entities = [city+' Library',city]
+        p.facts = [f for f in p.facts if f.id in ('f1','f2','f3','f7','f8')]
+        for f in p.facts:
+            f.evidence = f.evidence.replace('Tupelo',city)
+            f.statement = f.statement.replace('Tupelo',city)
+        d = fixtures.draft()
+        d.headline = city+' Library plans book sale'
+        d.excerpt = city+' Library announces a book sale.'
+        d.paragraphs = d.paragraphs[:2]
+        d.paragraphs[0].text = text.split(fixtures.DETAILS[0])[0].strip()
+        sid = 'source'+str(i)
+        sources.append({'source_id':sid,'url':f'https://example.org/{city}',
+            'title':d.headline,'publisher':city+' Library','source_date':'2026-09-11T12:00:00Z','text':text})
+        packets.append(ExtractedSection(source_id=sid,extraction=p))
+        drafts.append(WrittenSection(source_id=sid,draft=d))
+    return sources, RoundupExtraction(sections=packets), RoundupDraft(sections=drafts)
+
+
+def roundup_client(extracted, drafted, verification=None):
+    client = Mock()
+    client.responses.parse.side_effect = [SimpleNamespace(status='completed',usage=None,output_parsed=v)
+        for v in (extracted,drafted,verification or Verification(supported=True,issues=[],quality_passed=True))]
+    return client
+
+
+class BalancedCoverageTests(unittest.TestCase):
+    def test_actionable_brief_does_not_need_an_invented_why(self):
+        p = fixtures.packet()
+        p.public_service = True
+        p.five_ws.why = []
+        d = fixtures.draft()
+        d.paragraphs = d.paragraphs[:2]
+        result = rewrite_article('Notice',fixtures.SOURCE,'https://example.org',
+            fixtures.fake_client(extraction=p,generated=d),format='brief')
+        validate_publication_article(result)
+        self.assertLess(result.evidence['body_words'],300)
+        self.assertGreaterEqual(result.evidence['body_words'],70)
+
+    def test_short_promotional_item_cannot_claim_brief_exception(self):
+        with self.assertRaisesRegex(InsufficientSource,'public-service'):
+            rewrite_article('Notice',fixtures.SOURCE,'https://example.org',fixtures.fake_client(),format='brief')
+
+    def test_brief_still_requires_when_where_and_verified_claims(self):
+        p = fixtures.packet()
+        p.public_service = True
+        p.five_ws.when = []
+        with self.assertRaisesRegex(InsufficientSource,'when'):
+            rewrite_article('Notice',fixtures.SOURCE,'https://example.org',fixtures.fake_client(extraction=p),format='brief')
+
+    def test_three_source_roundup_is_valid_and_each_section_has_its_link(self):
+        sources, p, d = bundle()
+        article = rewrite_roundup(sources,roundup_client(p,d),'nano','writer')
+        validate_publication_article(article)
+        self.assertEqual(article.body.count('<h2>'),3)
+        self.assertEqual(article.body.count('class="news-source"'),3)
+        for s in sources:
+            self.assertIn(s['url'],article.body)
+        with self.assertRaisesRegex(ModelOutputError,'differs'):
+            validate_publication_article(replace(article,body=article.body+'<p>Extra claim.</p>'))
+
+    def test_roundup_cannot_borrow_evidence_from_another_source(self):
+        sources,p,d = bundle()
+        p.sections[0].extraction.facts[0].evidence = p.sections[1].extraction.facts[0].evidence
+        with self.assertRaisesRegex(ModelOutputError,'own source'):
+            rewrite_roundup(sources,roundup_client(p,d),'nano','writer')
+
+    def test_roundup_cannot_borrow_numbers_from_another_source(self):
+        sources,p,d = bundle()
+        sources[1]['text'] += ' There are 765 books.'
+        d.sections[0].draft.paragraphs[0].text += ' There are 765 books.'
+        with self.assertRaisesRegex(ModelOutputError,'assigned source'):
+            validate_sections(sources,p,d)
+
+    def test_duplicate_source_sections_do_not_make_a_roundup(self):
+        sources,p,d = bundle()
+        d.sections[1].source_id = d.sections[0].source_id
+        with self.assertRaises(InsufficientSource):
+            validate_sections(sources,p,d)
+
+    def test_sensitive_source_is_excluded_from_general_roundup(self):
+        sources,p,d = bundle()
+        p.sections[0].extraction.sensitive = True
+        with self.assertRaisesRegex(InsufficientSource,'three'):
+            rewrite_roundup(sources,roundup_client(p,d),'nano','writer')
+
+    def test_independent_verifier_can_reject_cross_story_context(self):
+        sources,p,d = bundle()
+        v = Verification(supported=False,quality_passed=False,issues=['Wrong date assigned to Oxford'])
+        with self.assertRaisesRegex(ModelOutputError,'Wrong date'):
+            rewrite_roundup(sources,roundup_client(p,d,v),'nano','writer')
+
+    def test_source_recovery_uses_exact_attribution_not_incidental_link(self):
+        wp = WordPressAPI('https://example.org','test','test')
+        wp.request = Mock(return_value=[
+            {'id':1,'content':{'rendered':'<a href="https://example.org/source">Related</a>'}},
+            {'id':2,'content':{'rendered':'<p class="news-source"><a href="https://example.org/source">Source</a></p>'}}])
+        self.assertEqual(wp.find_source_publication('https://example.org/source'),2)
+        self.assertIsNone(wp.find_source_publication('https://example.org/different'))
+
+    def test_alerts_are_processed_before_routine_articles(self):
+        fixture = fixtures.PublishingTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        f = fixture
+        f.cfg.max_posts_per_run = 1
+        alert = replace(f.entry,link='https://example.org/alert',content='Road closure. '+fixtures.SOURCE)
+        f.article.evidence['extraction']['public_service'] = True
+        with patch('main.fetch_feeds_with_raw',return_value=[(f.entry,{}),(alert,{})]), \
+             patch('main.get_source_image',return_value=Mock()), \
+             patch('main.rewrite_article',return_value=f.article) as rewrite:
+            stats = run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
+        self.assertEqual(rewrite.call_args.args[2],alert.link)
+        self.assertEqual(rewrite.call_args.kwargs['format'],'brief')
+        self.assertEqual(stats['created'],1)
+
+    def test_roundup_publication_adopts_each_included_source(self):
+        fixture = fixtures.PublishingTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        f = fixture
+        sources,p,d = bundle()
+        candidates = []
+        for i,s in enumerate(sources):
+            entry = replace(f.entry,link=s['url'],content=s['text'],feed_url=s['url']+'/feed')
+            policy = replace(f.cfg.policy(f.entry.feed_url),publisher=s['publisher'])
+            sid = source_key(entry)
+            s['source_id'] = sid
+            p.sections[i].source_id = sid
+            d.sections[i].source_id = sid
+            candidates.append((entry,{},policy,'feed-hash','digest'))
+        article = rewrite_roundup(sources,roundup_client(p,d),'nano','writer')
+        f.wp.find_source_publication.return_value = None
+        f.wp.upsert.return_value = {'post_id':42,'status':'publish'}
+        stats = {'created':0,'errors':0,'duplicates':0,'model_attempts':0,'model_attempt_budget':1,'reasons':{}}
+        store = Mock()
+        import time
+        with patch('main.rewrite_roundup',return_value=article), patch('main.get_source_image',return_value=Mock()):
+            run_roundup(f.cfg,candidates,stats,time.monotonic(),False,Mock(),f.wp,store,Mock())
+        self.assertEqual(stats['created'],1)
+        self.assertEqual(f.wp.upsert.call_count,4)
+        self.assertEqual(store.save.call_count,3)
+        self.assertEqual([c.args[0]['adopt_post_id'] for c in f.wp.upsert.call_args_list[1:]],[42,42,42])

@@ -1,5 +1,9 @@
 # Editorial quality audit and publication gate — October 2, 2026
 
+**Updated policy:** the initial full-article gate below now has verified
+public-service brief and multi-source briefing paths. See
+[balanced coverage](balanced-coverage.md) for the final publication rules.
+
 The public sample of 100 latest posts covered October 1 at 5:45 p.m. through
 October 2 at 8:26 a.m. site time. After excluding `.news-source` attribution,
 89 articles had fewer than 100 words, 98 fewer than 200, and 99 fewer than 300.
