@@ -339,6 +339,10 @@ def numeric_tokens(value):
                    r"((?:1[0-2]|0?[1-9])(?::[0-5]\d)?)\s*([ap]\.?m\.?)",
                    lambda m: f"{m.group(1)} {m.group(3)} to {m.group(2)} {m.group(3)}",
                    value, flags=re.I)
+    # A clock range without a meridiem still has two endpoints. Do not infer
+    # morning/evening, or split unrelated scores, ages and telephone numbers.
+    value = re.sub(r"\b((?:[01]?\d|2[0-3]):[0-5]\d)\s*[-–—]\s*"
+                   r"((?:[01]?\d|2[0-3]):[0-5]\d)\b", r"\1 to \2", value)
     # AP style omits :00 in whole-hour times. Accept that exact equivalence,
     # while keeping nonzero minutes, quantities, dates and all other checks.
     value = re.sub(r"\b(1[0-2]|0?[1-9]):00(?=\s*[ap]\.?m\.?(?:\b|\s|$))",

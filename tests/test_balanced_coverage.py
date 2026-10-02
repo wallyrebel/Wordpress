@@ -77,6 +77,12 @@ class BalancedCoverageTests(unittest.TestCase):
         self.assertNotEqual(numeric_tokens('6:00–10:00 PM'),numeric_tokens('7 p.m. to 10 p.m.'))
         self.assertEqual(numeric_tokens('A 6-10 score'),{'6-10'})
 
+    def test_clock_ranges_without_meridiem_keep_both_endpoints(self):
+        self.assertEqual(numeric_tokens('October 6th from 3:30-4:45'),
+                         numeric_tokens('Oct. 6 from 3:30 to 4:45'))
+        self.assertNotEqual(numeric_tokens('3:30-4:45'),numeric_tokens('3:00 to 4:45'))
+        self.assertEqual(numeric_tokens('65 years; 601-555-0100'),{'65','601-555-0100'})
+
     def test_source_names_cannot_replace_fact_ids_in_model_schema(self):
         data = fixtures.packet().model_dump()
         data['five_ws']['who'] = ['Mississippi State', 'South Carolina']
