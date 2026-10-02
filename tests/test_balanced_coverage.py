@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from ai_rewriter import (Extraction, Verification, InsufficientSource, ModelOutputError,
     rewrite_article, validate_publication_article, editorial_format)
+from ai_rewriter import numeric_tokens
 from roundups import (RoundupExtraction, ExtractedSection, RoundupDraft, WrittenSection,
     rewrite_roundup, validate_sections)
 from main import run_feed_processing, run_roundup, source_key
@@ -44,6 +45,27 @@ def roundup_client(extracted, drafted, verification=None):
 
 
 class BalancedCoverageTests(unittest.TestCase):
+    def test_ordinal_calendar_day_can_be_written_in_ap_style(self):
+        self.assertEqual(numeric_tokens('October 1st and 22nd'),numeric_tokens('Oct. 1 and 22'))
+        self.assertNotEqual(numeric_tokens('October 1st'),numeric_tokens('Oct. 2'))
+
+    def test_verified_brief_publishes_without_a_photo(self):
+        fixture = fixtures.PublishingTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        f = fixture
+        f.entry = replace(f.entry, content='Road closure. '+fixtures.SOURCE)
+        p = fixtures.packet()
+        p.public_service = True
+        d = fixtures.draft()
+        d.paragraphs = d.paragraphs[:2]
+        f.article = rewrite_article('Notice',fixtures.SOURCE,f.entry.link,
+            fixtures.fake_client(extraction=p,generated=d),format='brief')
+        stats = f.run_flow(image=False)
+        self.assertEqual(stats['created'],1)
+        self.assertEqual(f.wp.upsert.call_args.args[0]['featured_media'],0)
+        f.wp.upload_media.assert_not_called()
+
     def test_actionable_brief_does_not_need_an_invented_why(self):
         p = fixtures.packet()
         p.public_service = True

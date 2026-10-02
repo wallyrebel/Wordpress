@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v10-balanced-coverage-1"
+PROMPT_VERSION = "evidence-v10-balanced-coverage-2"
 # Editorial floors for automatic publication, not Google ranking requirements.
 MIN_SOURCE_WORDS = 180
 MIN_ARTICLE_WORDS = 300
@@ -211,7 +211,8 @@ def editorial_format(content):
             r"\b(arrest\w*|charg(?:e|ed|es)|missing|evacuat\w*|boil.water|"
             r"advisory|warning|closed|closure|detour|deadline|shelter|"
             r"public meeting|register by|registration opens|food distribution|"
-            r"free clinic|outage|road work|shooting|homicide)\b", text, re.I):
+            r"free clinic|outage|road work|paving|water.{0,20}restored|"
+            r"postponed|cancell?ed|rescheduled|shooting|homicide)\b", text, re.I):
         return "brief"
     return "full" if word_count(text) >= MIN_SOURCE_WORDS else "roundup"
 
@@ -313,6 +314,8 @@ def check_direct_quotes(text, source):
             raise ModelOutputError("Direct quotation differs from source: " + quote[:300])
 
 def numeric_tokens(value):
+    # Calendar ordinals (October 1st -> Oct. 1) retain exactly the same number.
+    value = re.sub(r"\b(\d+)(?:st|nd|rd|th)\b", r"\1", value, flags=re.I)
     # Police releases often join the meridiem to the time ("1:56am"). Without
     # a boundary, the numeric regex backtracks and reads that as just "1".
     value = re.sub(r"(?<=\d)(?=[ap]\.?m\.?(?:\b|$))", " ", value, flags=re.I)
@@ -335,7 +338,9 @@ def _call(client, model, effort, schema, prompt, payload, max_tokens, usage):
     if response.usage:
         usage.append({"model": model, **response.usage.model_dump()})
     if response.status != "completed" or response.output_parsed is None:
-        raise ModelOutputError("Model refused or did not complete structured output")
+        details = getattr(response, 'incomplete_details', None)
+        reason = getattr(details, 'reason', None) or 'no parsed output'
+        raise ModelOutputError(f"{schema.__name__}: structured output {response.status} ({reason})")
     return response.output_parsed
 
 def rewrite_article(title, content, link, openai_client, *,

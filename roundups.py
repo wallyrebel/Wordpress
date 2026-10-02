@@ -115,9 +115,9 @@ def rewrite_roundup(sources, client, extraction_model, drafting_model):
     if not 3 <= len(sources) <= 6 or sum(word_count(s['text']) for s in sources) < 250:
         raise InsufficientSource('Not enough source material for a useful roundup')
     usage = []
-    extracted = _call(client, extraction_model, 'medium', RoundupExtraction,
+    extracted = _call(client, extraction_model, 'low', RoundupExtraction,
         EXTRACT_PROMPT + '\nExtract each source separately under its source_id. Omit teasers, praise, ads, duplicate events, or items lacking who/what/where/when. Each evidence quote must come from THAT source only. A concise useful community or sports update can be substantive in this briefing. Omit sensitive crime, medical and emergency items: those need standalone public-service coverage. Select a coherent community briefing or sports briefing, without pretending different events are related.',
-        {'sources':sources}, 8000, usage)
+        {'sources':sources}, 12000, usage)
     source_map = {s['source_id']:s for s in sources}
     accepted = []
     for section in extracted.sections:
@@ -151,7 +151,7 @@ def rewrite_roundup(sources, client, extraction_model, drafting_model):
     excerpt = 'Verified local updates with the dates, places and source links for each item.'
     verification = _call(client, extraction_model, 'medium', Verification,
         VERIFY_PROMPT + '\nThis is a roundup, not one combined event. Validate each section ONLY against the source with its source_id. Reject cross-source fact mixing, repeated events, padded text, unsupported relationships, stale alerts or misleading omissions. Each section needs who, what, where and when; why may be omitted when unstated. The briefing date is its compilation date, not a claim that all events occurred that day. Judge usefulness across the whole 250+ word briefing, not a 300-word minimum per section.',
-        {'sources':used_sources,'extraction':extracted.model_dump(),'draft':drafted.model_dump()}, 5000, usage)
+        {'sources':used_sources,'extraction':extracted.model_dump(),'draft':drafted.model_dump()}, 6500, usage)
     if not verification.supported or verification.issues or not verification.quality_passed:
         raise ModelOutputError('Roundup verification failed: '+'; '.join(verification.issues))
     tags = list(dict.fromkeys(e.strip().lower() for sec in extracted.sections if sec.source_id in used

@@ -44,7 +44,7 @@ function check($condition,$message) {
 $p=array('source_key'=>str_repeat('a',64),'content_hash'=>str_repeat('b',64),
     'source_url'=>'https://example.org/story','title'=>'News','content'=>'<p>Verified story.</p>',
     'status'=>'publish','categories'=>array(1),'tags'=>array(2),'featured_media'=>3,'review_reasons'=>array(),
-    'evidence'=>array('verification'=>array('supported'=>true,'issues'=>array()),'extraction'=>array('facts'=>array('test fact'))));
+    'evidence'=>array('verification'=>array('supported'=>true,'quality_passed'=>true,'issues'=>array()),'extraction'=>array('facts'=>array('test fact'))));
 $first=msn_article(new Request($p));
 check(!is_wp_error($first) && $first['status']==='publish','complete item publishes');
 check($posts[$first['post_id']]['meta_input']['_thumbnail_id']===3,'featured image attached at creation');
@@ -73,3 +73,12 @@ $image_dimensions = array('width'=>720, 'height'=>960);
 add_option('msn_lock_'.$p['source_key'],'busy');
 $locked=msn_article(new Request($p));
 check(is_wp_error($locked) && $locked->code==='source_locked' && $inserts===1,'concurrent/abandoned lock fails closed');
+$p['source_key']=str_repeat('e',64); $p['featured_media']=0;
+$p['evidence']['format']='brief'; $p['evidence']['extraction']['public_service']=true;
+$brief=msn_article(new Request($p));
+check(!is_wp_error($brief) && $inserts===2,'verified public-service brief may publish without a photo');
+$p['source_key']=str_repeat('f',64); $p['evidence']['verification']['quality_passed']=false;
+check(is_wp_error(msn_article(new Request($p))) && $inserts===2,'brief photo exception never bypasses quality verification');
+$p['evidence']['verification']['quality_passed']=true; $p['featured_media']=3;
+$image_dimensions=array('width'=>100,'height'=>100);
+check(is_wp_error(msn_article(new Request($p))) && $inserts===2,'brief cannot attach an invalid photo');

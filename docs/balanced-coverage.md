@@ -24,6 +24,11 @@ Short greetings, teasers, photo captions and unsupported claims still do not
 qualify. A run can publish zero when the current source material does not meet
 any format; there is no quota that overrides evidence or freshness.
 
+Verified service briefs and multi-source briefings may publish without a photo.
+Any attached photograph still requires reuse permission and the existing image
+quality checks. No unrelated stock image or artificial incident photo is used.
+Install companion plugin 1.0.2 before enabling this exception in production.
+
 Source receipts prevent republishing members of a briefing as new standalone
 stories. Exact source-attribution lookup recovers coverage if a runner stopped
 before writing every member receipt. The briefing date is a compilation date,

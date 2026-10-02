@@ -19,11 +19,11 @@ concurrency:
 
 jobs:
   publish-articles:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.11'
           cache: pip
@@ -32,7 +32,7 @@ jobs:
       - name: Run offline regression checks
         run: python -m unittest discover -s tests -v
       - name: Restore legacy database and local cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6.1.0
         with:
           path: processed.db
           key: processed-db-${{ github.run_id }}-${{ github.run_attempt }}
@@ -61,7 +61,7 @@ jobs:
           fi
       - name: Save local cache
         if: always() && inputs.dry_run != true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6.1.0
         with:
           path: processed.db
           key: processed-db-${{ github.run_id }}-${{ github.run_attempt }}
@@ -70,7 +70,7 @@ jobs:
         run: python scripts/run_report.py
       - name: Upload review queue and run summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: news-review-${{ github.run_id }}-${{ github.run_attempt }}
           path: |

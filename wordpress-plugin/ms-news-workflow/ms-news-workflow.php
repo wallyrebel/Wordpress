@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: MS News Workflow
- * Description: Authenticated publishing receipts with required images and taxonomy.
- * Version: 1.0.1
+ * Description: Authenticated publishing receipts with verified evidence and taxonomy.
+ * Version: 1.0.2
  */
 if (!defined('ABSPATH')) { exit; }
 
@@ -63,7 +63,7 @@ function msn_article($request) {
                 return new WP_Error('publish_only', 'Only checked publication is supported.', array('status' => 400));
             }
             $verification = isset($p['evidence']['verification']) ? $p['evidence']['verification'] : array();
-            if (empty($verification['supported']) || !empty($verification['issues']) || empty($p['evidence']['extraction']['facts'])) {
+            if (empty($verification['supported']) || empty($verification['quality_passed']) || !empty($verification['issues']) || empty($p['evidence']['extraction']['facts'])) {
                 return new WP_Error('evidence_required', 'Passed factual verification and source evidence required.', array('status' => 400));
             }
             if (!current_user_can('publish_posts')) {
@@ -82,8 +82,13 @@ function msn_article($request) {
             }
             $media = isset($p['featured_media']) ? absint($p['featured_media']) : 0;
             $dimensions = wp_get_attachment_metadata($media);
-            if (!$media || !wp_attachment_is_image($media) || empty($dimensions['width']) || empty($dimensions['height'])
-                || $dimensions['width'] < 600 || $dimensions['height'] < 400 || $dimensions['width'] / $dimensions['height'] > 3.5) {
+            // Useful service notices and verified briefings must not wait for a photo.
+            // If a photo is supplied it still has to meet the existing quality rules.
+            $format = isset($p['evidence']['format']) ? $p['evidence']['format'] : 'full';
+            $photo_optional = ($format === 'brief' && !empty($p['evidence']['extraction']['public_service']))
+                || ($format === 'roundup' && count((array)($p['evidence']['sources'] ?? array())) >= 3);
+            if ((!$media && !$photo_optional) || ($media && (!wp_attachment_is_image($media) || empty($dimensions['width']) || empty($dimensions['height'])
+                || $dimensions['width'] < 600 || $dimensions['height'] < 400 || $dimensions['width'] / $dimensions['height'] > 3.5))) {
                 return new WP_Error('bad_image', 'Invalid image.', array('status' => 400));
             }
             // From here failures keep the lock, preventing ambiguous writes being retried.

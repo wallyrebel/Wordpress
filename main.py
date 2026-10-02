@@ -187,7 +187,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 image_attempts += 1
                 stage = "source image selection"
                 image = get_source_image(raw, policy, config.image_dir)
-                if not image:
+                if not image and format != 'brief':
                     raise InsufficientSource("No eligible featured image (minimum 600px wide and 400px high)")
                 # Limit paid model attempts, not deduplication, source updates or
                 # missing-image checks. All publication checks still apply.
@@ -260,8 +260,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     observe(entry, "held", "; ".join(record["reasons"]))
                     continue
                 stage = "WordPress featured image upload"
-                media_id = wp.upload_media(image, article.headline)
-                if not media_id:
+                media_id = wp.upload_media(image, article.headline) if image else 0
+                if image and not media_id:
                     raise ValueError("Featured image upload failed")
                 publisher = policy.publisher or "original source"
                 source_line = '<p class="news-source">Source: <a href="' + html.escape(
@@ -392,13 +392,11 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
             raise InsufficientSource('A briefing for this section and compilation date is already published')
         image = next((found for _,raw,policy,_,_ in included
                       if (found := get_source_image(raw,policy,config.image_dir))),None)
-        if not image:
-            raise InsufficientSource('Roundup lacks an eligible image from an included source')
         category_ids, tag_ids = wp.taxonomy(article.category,article.tags,config.category_ids)
         if not category_ids or not tag_ids:
             raise InsufficientSource('Roundup category or supported tags missing')
-        media_id = wp.upload_media(image,article.headline)
-        if not media_id:
+        media_id = wp.upload_media(image,article.headline) if image else 0
+        if image and not media_id:
             raise ValueError('Roundup featured image upload failed')
         digest = fingerprint(article.headline,json.dumps(article.evidence['sources'],sort_keys=True))
         receipt = wp.upsert({'source_key':key,'content_hash':digest,'source_url':included[0][0].link,

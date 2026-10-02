@@ -8,11 +8,11 @@ permissions:
 
 jobs:
   check-sources:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.11'
           cache: pip
@@ -22,7 +22,7 @@ jobs:
         run: python scripts/check_feeds.py
       - name: Save source connectivity report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: rss-source-connectivity-${{ github.run_id }}
           path: review/feed-connectivity.*
