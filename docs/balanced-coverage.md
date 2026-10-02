@@ -13,6 +13,7 @@ depth and coverage. A single 300-word minimum is no longer applied to every stor
   routing does not waive the extractor or verifier's substantive-value checks.
 - **Multi-source briefings:** combine 3–6 useful smaller items from at least two
   publishers into 250–900 supported body words. Each section needs its own facts,
+  30–200 body words,
   dates, location, headline and source link. Evidence, numbers and quotations are
   checked against that section's source, then the whole draft is verified for
   accuracy, relevance, duplicate events and useful detail. Sensitive crime,

@@ -242,7 +242,7 @@ def check_completeness(extraction, format="full"):
 
 def check_body_quality(paragraphs, five_ws, format="full"):
     body = " ".join(p.text for p in paragraphs)
-    minimum = MIN_ARTICLE_WORDS if format == "full" else 70 if format == "brief" else 45
+    minimum = MIN_ARTICLE_WORDS if format == "full" else 70 if format == "brief" else 30
     paragraphs_min = MIN_PARAGRAPHS if format == "full" else 2 if format == "brief" else 1
     if word_count(body) < minimum:
         raise InsufficientSource(f"Fewer than {minimum} body words; no padding allowed")
@@ -333,6 +333,11 @@ def numeric_tokens(value):
     # Police releases often join the meridiem to the time ("1:56am"). Without
     # a boundary, the numeric regex backtracks and reads that as just "1".
     value = re.sub(r"(?<=\d)(?=[ap]\.?m\.?(?:\b|$))", " ", value, flags=re.I)
+    # A shared meridiem applies to both endpoints (6:00-10:00 PM).
+    value = re.sub(r"\b((?:1[0-2]|0?[1-9])(?::[0-5]\d)?)\s*[-–—]\s*"
+                   r"((?:1[0-2]|0?[1-9])(?::[0-5]\d)?)\s*([ap]\.?m\.?)",
+                   lambda m: f"{m.group(1)} {m.group(3)} to {m.group(2)} {m.group(3)}",
+                   value, flags=re.I)
     # AP style omits :00 in whole-hour times. Accept that exact equivalence,
     # while keeping nonzero minutes, quantities, dates and all other checks.
     value = re.sub(r"\b(1[0-2]|0?[1-9]):00(?=\s*[ap]\.?m\.?(?:\b|\s|$))",
@@ -443,7 +448,7 @@ def rewrite_article(title, content, link, openai_client, *,
         "approved_primary_source": approved_primary_source,
         "five_ws": extraction.five_ws.model_dump(),
         "facts": extraction.model_dump()["facts"],
-        "draft": draft.model_dump()}, 4000 if sensitive else 1800, usage)
+        "draft": draft.model_dump()}, 6500 if sensitive else 4000, usage)
     # Failed factual verification never produces a WordPress post.
     if not verification.supported or verification.issues or not verification.quality_passed:
         raise ModelOutputError("Factual verification failed: " + "; ".join(verification.issues))

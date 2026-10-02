@@ -71,6 +71,12 @@ class BalancedCoverageTests(unittest.TestCase):
         self.assertEqual(numeric_tokens('10/26-11/1'), numeric_tokens('Oct. 26 through Nov. 1'))
         self.assertNotEqual(numeric_tokens('10/26-11/1'), numeric_tokens('Oct. 25 through Nov. 1'))
 
+    def test_shared_meridiem_time_ranges_allow_ap_style(self):
+        self.assertEqual(numeric_tokens('6:00–10:00 PM'),numeric_tokens('6 p.m. to 10 p.m.'))
+        self.assertNotEqual(numeric_tokens('6:30–10:00 PM'),numeric_tokens('6 p.m. to 10 p.m.'))
+        self.assertNotEqual(numeric_tokens('6:00–10:00 PM'),numeric_tokens('7 p.m. to 10 p.m.'))
+        self.assertEqual(numeric_tokens('A 6-10 score'),{'6-10'})
+
     def test_source_names_cannot_replace_fact_ids_in_model_schema(self):
         data = fixtures.packet().model_dump()
         data['five_ws']['who'] = ['Mississippi State', 'South Carolina']
@@ -135,6 +141,22 @@ class BalancedCoverageTests(unittest.TestCase):
             self.assertIn(s['url'],article.body)
         with self.assertRaisesRegex(ModelOutputError,'differs'):
             validate_publication_article(replace(article,body=article.body+'<p>Extra claim.</p>'))
+
+    def test_concise_complete_section_can_join_substantial_briefing(self):
+        from ai_rewriter import Paragraph, word_count
+        sources,p,d = bundle()
+        concise = ("Tupelo Library will hold a public book sale in Tupelo, Mississippi, on September 12 "
+                   "at 10 a.m. Proceeds support the community reading program and replacement of worn "
+                   "materials in the children's collection.")
+        self.assertLess(word_count(concise),45)
+        d.sections[0].draft.paragraphs = [Paragraph(text=concise,fact_ids=['f1','f2','f3','f7','f8'])]
+        self.assertGreaterEqual(validate_sections(sources,p,d),250)
+        # Three short sections alone still cannot pass the whole-article floor.
+        for section in d.sections[1:]:
+            city = 'Oxford' if section.source_id == 'source1' else 'Corinth'
+            section.draft.paragraphs = [Paragraph(text=concise.replace('Tupelo',city),fact_ids=['f1','f2','f3','f7','f8'])]
+        with self.assertRaisesRegex(InsufficientSource,'250-900'):
+            validate_sections(sources,p,d)
 
     def test_briefing_date_uses_mississippi_calendar_not_utc(self):
         sources,p,d = bundle()
