@@ -472,7 +472,7 @@ def rewrite_article(title, content, link, openai_client, *,
     body = "".join("<p>" + html.escape(p.text.strip()) + "</p>" for p in draft.paragraphs)
     tags = list(dict.fromkeys(e.strip().lower() for e in extraction.entities
         if 2 <= len(e.strip()) <= 60 and not re.search(r"\d", e)
-        and normalized(e) in normalized(source)))[:5]
+        and normalized(e) in normalized(source) and normalized(e) in normalized(combined)))[:5]
     # First-person notices often omit the agency name. The configured/feed
     # publisher is verified attribution metadata, so it can supply a source tag.
     if not tags and approved_primary_source:

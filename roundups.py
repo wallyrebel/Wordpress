@@ -110,6 +110,33 @@ def render_roundup(sources, drafted):
     return ''.join(body)
 
 
+def roundup_tags(sources, extracted, drafted):
+    """Tag what readers actually see, with coverage across the included sections."""
+    source_map = {s['source_id']:s for s in sources}
+    facts_map = {s.source_id:s.extraction for s in extracted.sections}
+    groups = []
+    for section in drafted.sections:
+        source = source_map[section.source_id]
+        text = normalized(section.draft.headline + ' ' + ' '.join(p.text for p in section.draft.paragraphs))
+        publisher = re.sub(r'\s+on Facebook$', '', source['publisher'], flags=re.I).strip()
+        names = list(facts_map[section.source_id].entities)
+        if source.get('approved_primary_source'):
+            names.append(publisher)
+        groups.append(list(dict.fromkeys(name.strip().lower() for name in names
+            if 2 <= len(name.strip()) <= 60 and not re.search(r'\d',name)
+            and normalized(name) in text
+            and (normalized(name) in normalized(source['text'])
+                 or source.get('approved_primary_source') and normalized(name) == normalized(publisher)))))
+    tags = []
+    for position in range(max((len(g) for g in groups),default=0)):
+        for group in groups:
+            if position < len(group) and group[position] not in tags:
+                tags.append(group[position])
+                if len(tags) == 5:
+                    return tags
+    return tags
+
+
 def validate_roundup(article):
     ev = article.evidence
     try:
@@ -197,9 +224,7 @@ def rewrite_roundup(sources, client, extraction_model, drafting_model):
          'compiled_at':compiled_at.isoformat()}, 6500, usage)
     if not verification.supported or verification.issues or not verification.quality_passed:
         raise ModelOutputError('Roundup verification failed: '+'; '.join(verification.issues))
-    tags = list(dict.fromkeys(e.strip().lower() for sec in extracted.sections if sec.source_id in used
-        for e in sec.extraction.entities if 2 <= len(e.strip()) <= 60 and not re.search(r'\d',e)
-        and normalized(e) in normalized(source_map[sec.source_id]['text'])))[:5]
+    tags = roundup_tags(used_sources,extracted,drafted)
     evidence = {'prompt_version':PROMPT_VERSION,'format':'roundup','headline':headline,'excerpt':excerpt,
         'sources':used_sources,'roundup_extraction':extracted.model_dump(),'roundup_draft':drafted.model_dump(),
         'verification':verification.model_dump(),'usage':usage,'body_words':words,

@@ -10,7 +10,7 @@ from ai_rewriter import (Extraction, Verification, InsufficientSource, ModelOutp
 from ai_rewriter import numeric_tokens
 from roundups import (RoundupExtraction, ExtractedSection, RoundupDraft, WrittenSection,
     rewrite_roundup, validate_sections)
-from roundups import candidate_group
+from roundups import candidate_group, roundup_tags
 from main import run_feed_processing, run_roundup, source_key
 from wordpress_api import WordPressAPI
 import test_workflow as fixtures
@@ -227,6 +227,15 @@ class BalancedCoverageTests(unittest.TestCase):
         self.assertIn('source0: 765',payload['previous_validation_error'])
         self.assertEqual(payload['sources'],sources)
         self.assertEqual(client.responses.parse.call_count,4)
+
+    def test_briefing_tags_cover_sections_and_exclude_omitted_names(self):
+        sources,p,d = bundle()
+        sources[0]['text'] += ' An unrelated donor is Alice Example.'
+        p.sections[0].extraction.entities.insert(0,'Alice Example')
+        tags = roundup_tags(sources,p,d)
+        self.assertNotIn('alice example',tags)
+        self.assertEqual(tags[:3],['tupelo library','oxford library','corinth library'])
+        self.assertLessEqual(len(tags),5)
 
     def test_failed_roundup_repair_stays_held_with_diagnostics(self):
         sources,p,d = bundle()
