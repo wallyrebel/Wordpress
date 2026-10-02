@@ -47,6 +47,28 @@ class WordPressAPI:
     def upsert(self, payload):
         return self.request("POST", "ms-news/v1/article", json=payload)
 
+    def find_duplicate_headline(self, headline):
+        """Check the authoritative site, including after runner cache loss.
+
+        Exact normalized titles only: similar stories can be distinct developments.
+        Search errors propagate so publication fails closed.
+        """
+        def normalized_title(value):
+            return " ".join(re.findall(r"\w+", html.unescape(value).casefold()))
+        normalized = normalized_title(headline)
+        page = 1
+        while page <= 5:
+            posts = self.request("GET", "wp/v2/posts", params={
+                "search": " ".join(normalized.split()[:6]), "per_page": 100,
+                "page": page, "status": "publish", "_fields": "id,title"})
+            for post in posts:
+                if normalized_title(post["title"]["rendered"]) == normalized:
+                    return post["id"]
+            if len(posts) < 100:
+                return None
+            page += 1
+        raise ValueError("Duplicate search exceeds bounded review limit")
+
     def create_or_get_tag(self, tag):
         try:
             return self.request("POST", "wp/v2/tags", json={"name": tag})["id"]

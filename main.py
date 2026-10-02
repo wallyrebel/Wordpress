@@ -12,7 +12,8 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from openai import OpenAI
-from ai_rewriter import rewrite_article, fingerprint, clean_text, InsufficientSource, ModelOutputError, PROMPT_VERSION
+from ai_rewriter import (rewrite_article, fingerprint, clean_text, check_source_length,
+                         validate_publication_article, InsufficientSource, ModelOutputError, PROMPT_VERSION)
 from config import load_config
 from database import Store
 from feed_parser import fetch_feeds_with_raw, enrich_entry
@@ -157,6 +158,9 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                             "reason": "Published source changed; editorial update required"})
                     observe(entry, "source_update", "Published source changed; editorial update required")
                     continue
+                # Thin sources must not consume images/model budget and hide better items.
+                stage = "source quality gate"
+                check_source_length(entry.content)
                 if attempted >= (limit or config.max_posts_per_run):
                     stats["budget_reached"] = True
                     stats["deferred"] = stats.get("deferred", 0) + 1
@@ -198,6 +202,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                         stats["repair_attempts"] = stats.get("repair_attempts", 0) + 1
                 if policy.category:
                     article = replace(article, category=policy.category)
+                validate_publication_article(article)
                 record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
                           "content_hash": digest, "source_text": clean_text(entry.content),
                           "article": asdict(article)}
@@ -215,6 +220,16 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                             "reason": "; ".join(record["reasons"]), "model_attempts": item_attempts})
                     stats["held"] += 1
                     observe(entry, "held", "; ".join(record["reasons"]))
+                    continue
+                stage = "duplicate headline check"
+                duplicate = wp.find_duplicate_headline(article.headline)
+                if duplicate:
+                    record.update(status="duplicate", duplicate_post_id=duplicate)
+                    write_json(Path(config.review_dir) / (key + ".json"), record)
+                    store.save(key, digest, {"status": "duplicate", "post_id": duplicate,
+                        "feed_hash": original_hash, "reason": "Exact headline already published"})
+                    stats["duplicates"] += 1
+                    observe(entry, "duplicate", "Exact headline already published")
                     continue
                 stage = "WordPress category and tags"
                 category_ids, tag_ids = wp.taxonomy(article.category, article.tags, config.category_ids)

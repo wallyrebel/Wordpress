@@ -17,34 +17,47 @@ from safe_http import canonical_url, validate_public
 
 SOURCE = ("The Tupelo Library will hold a free book sale in Tupelo, Mississippi, on September 12. "
           "The library announced that the sale starts at 10 a.m. and is open to the public.")
+# Fictional, substantial source for exercising the publication path offline.
+DETAILS = [
+    "Library staff said proceeds from donated books will support the community reading program and replacement of worn materials in the children's collection. The sale will take place in the main meeting room, with separate tables for children's books, local history and general fiction. Staff members will remain available throughout the event to help visitors locate those sections and explain how the reading program uses donations. Families may attend together, and there is no registration requirement for browsing the sale.",
+    "Volunteers will sort donated materials before the doors open and place signs on each table identifying the available subjects. The library asks donors to bring clean books with intact covers and pages to the circulation desk during its regular opening hours. Staff will inspect donations before adding them to the sale and will explain which materials the library cannot accept. Visitors who need help carrying their purchases may ask a volunteer at the meeting room entrance for assistance.",
+    "The library said the meeting room is accessible from the main entrance and that the accessible entrance will remain open during the event. People seeking accommodations should contact the circulation desk before attending so staff can discuss their needs. The announcement directs visitors to use the library parking area and keep the marked entrance clear. Staff said normal borrowing services will continue while the sale takes place, and patrons may return materials at the usual circulation desk.",
+    "The community reading program provides materials for families who want to read together outside regular library activities. According to the library, money from this sale will be reserved for that program and the children's collection rather than general building work. Staff will record the proceeds after the event and include the amount in the library's regular public activity report. Questions about donations, accessibility and the event may be directed to the circulation desk during regular opening hours."
+]
+SOURCE += " " + " ".join(DETAILS)
 def packet():
     return Extraction(mississippi_relevant=True,
         sensitive=False, category="Community", entities=["Tupelo Library", "Tupelo"],
+        substantive=True, reader_value="Funding and practical access details for local library users.",
+        five_ws=FiveWs(who=["f1"], what=["f1"], where=["f7"], when=["f8"], why=["f3"]),
         facts=[Fact(id="f1", statement="Library holds sale", evidence="The Tupelo Library will hold a free book sale"),
-               Fact(id="f2", statement="Public welcome", evidence="is open to the public")])
+               Fact(id="f2", statement="Public welcome", evidence="is open to the public"),
+               *[Fact(id=f"f{i+3}", statement=text.split('.')[0], evidence=text.split('.')[0]) for i,text in enumerate(DETAILS)],
+               Fact(id="f7",statement="Sale in Tupelo",evidence="in Tupelo, Mississippi"),
+               Fact(id="f8",statement="September 12 date",evidence="on September 12")])
 def draft():
     return Draft(headline="Tupelo Library plans book sale", headline_fact_ids=["f1"],
         excerpt="Tupelo Library plans a public book sale.",
         paragraphs=[Paragraph(text="Tupelo Library plans a book sale, according to the library.",
-                              fact_ids=["f1", "f2"])])
+                              fact_ids=["f1", "f2", "f7", "f8"]),
+                    *[Paragraph(text=text, fact_ids=[f"f{i+3}"]) for i,text in enumerate(DETAILS)]])
 def fake_client(extraction=None, generated=None, verification=None):
     values = [extraction or packet(), generated or draft(),
-              verification or Verification(supported=True, issues=[])]
+              verification or Verification(supported=True, issues=[], quality_passed=True)]
     client = Mock()
     client.responses.parse.side_effect = [
         SimpleNamespace(status="completed", output_parsed=v, usage=None) for v in values]
     return client
 
 class RewriterTests(unittest.TestCase):
-    def test_approved_feed_does_not_need_explicit_mississippi_mention(self):
+    def test_approved_feed_cannot_bypass_missing_mississippi_relevance(self):
         extraction = packet()
         extraction.mississippi_relevant = False
         client = fake_client(extraction)
-        result = rewrite_article("Sale", SOURCE, "https://example.org", client,
-                                 approved_primary_source=True)
-        self.assertFalse(result.requires_review)
-        verification = json.loads(client.responses.parse.call_args.kwargs["input"][1]["content"])
-        self.assertTrue(verification["approved_primary_source"])
+        with self.assertRaisesRegex(InsufficientSource, "Mississippi relevance"):
+            rewrite_article("Sale", SOURCE, "https://example.org", client,
+                            approved_primary_source=True)
+        self.assertEqual(client.responses.parse.call_count, 1)
 
     def test_unapproved_source_still_needs_relevance(self):
         extraction = packet()
@@ -155,7 +168,7 @@ class RewriterTests(unittest.TestCase):
     def test_verifier_failure_rejected(self):
         with self.assertRaises(ModelOutputError):
             rewrite_article("Sale", SOURCE, "https://example.org",
-                fake_client(verification=Verification(supported=False, issues=["Wrong attribution"])))
+                fake_client(verification=Verification(supported=False, issues=["Wrong attribution"], quality_passed=False)))
 
     def test_model_refusal_fails_closed(self):
         client = Mock()
@@ -199,7 +212,7 @@ class RewriterTests(unittest.TestCase):
         self.assertNotIn("[f2]", result.body)
         checked = json.loads(client.responses.parse.call_args.kwargs["input"][1]["content"])
         self.assertNotIn("[f1]", checked["draft"]["paragraphs"][0]["text"])
-        self.assertEqual(checked["draft"]["paragraphs"][0]["fact_ids"], ["f1", "f2"])
+        self.assertEqual(checked["draft"]["paragraphs"][0]["fact_ids"], ["f1", "f2", "f7", "f8"])
 
 class FeedTests(unittest.TestCase):
     def test_url_dedupe(self):
@@ -256,11 +269,11 @@ class PublishingTests(unittest.TestCase):
             datetime.now(timezone.utc), SOURCE, SOURCE, self.cfg.rss_feeds[0], publisher="Tupelo Library")
         self.wp = Mock()
         self.wp.receipt.return_value = {}
+        self.wp.find_duplicate_headline.return_value = None
         self.wp.taxonomy.return_value = ([1],[2])
         self.wp.upload_media.return_value = 3
         self.wp.upsert.return_value = {"post_id":4,"status":"publish"}
-        self.article = RewrittenArticle("Library sale","<p>Library sale.</p>","Community",
-            ["tupelo"],"Library sale.",False,[],{})
+        self.article = rewrite_article("Library sale", SOURCE, self.entry.link, fake_client())
 
     def run_flow(self, image=True, dry_run=False, rewrite_error=None):
         def feeds(*args):

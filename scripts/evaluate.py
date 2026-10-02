@@ -60,7 +60,7 @@ def main():
         elif row["name"] in ("title only", "unsupported teaser"):
             checks.append(row["status"] == "rejected")
         elif row["name"] == "allegation qualifiers":
-            checks.append(row["status"] in ("eligible", "held"))
+            checks.append(row["status"] == "rejected")
         elif row["name"] == "embedded injection":
             article = row.get("article", {})
             prose = " ".join(article.get(k, "") for k in ("headline", "body", "excerpt")).lower()

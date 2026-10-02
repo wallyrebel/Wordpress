@@ -2,15 +2,15 @@
 
 This workflow uses **GPT-5 Nano** to extract source-backed facts, **GPT-5.6 Luna** to write the article, and **GPT-5 Nano** to check the draft against the original source.
 
-The publisher has approved all configured RSS feeds as factual, first-person sources for rewriting and quoting. Enabled feeds do not require separate source approval, independent corroboration, or an explicit Mississippi mention in every entry. Verification checks the rewrite against the source account; factual fidelity, exact quotations, attribution, images and taxonomy remain required.
+Configured feeds remain approved sources under the publisher's existing reuse arrangements. Approval supplies attribution; it never bypasses completeness, source quality or Mississippi relevance.
 
-Article length: aim for 300–500 body words when the source supports a full article. Extract and cover all useful material details from substantial reports. Short notices can remain shorter; do not add repetition, invented context or stretched quotations to meet a word count. This is an editorial target, not a Google minimum or a publication gate. The existing maximum length and factual checks still apply.
+Automatic publication now requires **at least 180 source words, seven distinct evidence-backed facts, and 300 body words in four to eight substantive paragraphs**. These are editorial floors, not Google's word-count requirements. Every article must answer **who, what, where, when and why** from the source. Why can be the explicitly stated purpose or public impact; a crime story must never invent a motive. Missing answers, generic reminders, promotional praise and sources too thin to support a full article are skipped. The writer must never pad an article to reach the floor.
 
-Approved primary-source briefs with at least eight source words can proceed to fact extraction even when shorter than 20 words. Concrete facts, supported entity tags, a usable source image and full factual verification are still required; titles alone do not qualify. Numeric validation accepts equivalent time formatting such as `1:56am` and `1:56 a.m.` while rejecting changed minutes or hours. The prompt version changes when these checks change, so cached rejections are reconsidered without republishing articles that already have WordPress receipts.
+The extractor maps each of the five questions to fact IDs. Code checks those references against exact source excerpts and requires their coverage in the body. A separate verification call checks the actual prose for completeness, factual support, meaningful local value, repetition, stale/ambiguous dates and language artifacts. Semantic checks remain model-assisted, so the evidence record remains available to an editor.
 
 It publishes automatically only when every requirement passes:
 
-- A current, dated source from your configured feed list.
+- A current, dated source from your configured feed list. A refreshed `updated` date cannot revive an old `published` date.
 - Mississippi relevance and concrete, source-supported facts.
 - Evidence quotations that actually occur in the source. Extra wrapping quotation marks are removed only when the enclosed excerpt matches the source.
 - Story text is summarized; any direct quotations retain exact source wording and attribution. Altered quotations are blocked. The writer and verifier receive the same source URL and publisher.
@@ -45,11 +45,11 @@ See `.env.example`. Defaults:
 | EXTRACTION_MODEL | gpt-5-nano |
 | DRAFTING_MODEL | gpt-5.6-luna |
 | PUBLISH_MODE | auto |
-| MAX_POSTS_PER_RUN | 30 |
+| MAX_POSTS_PER_RUN | 8 |
 | MAX_RUN_SECONDS | 600 |
-| MAX_ENTRIES_PER_FEED | 25 |
+| MAX_ENTRIES_PER_FEED | 3 |
 | MAX_AGE_HOURS | 24 |
-| POLL_INTERVAL_MINUTES | 15 |
+| POLL_INTERVAL_MINUTES | 120 |
 
 Nano uses low reasoning for extraction and ordinary verification, and medium for sensitive-subject verification; Luna uses none. Responses have explicit output-token caps, strict Pydantic Structured Outputs, a 90-second client timeout and at most two SDK retries. There is no silent fallback to another drafting model. Each accepted article records actual token usage in its evidence packet. Reasoning tokens count toward output usage.
 
@@ -69,17 +69,17 @@ Tags are limited to up to five names of people, organizations and places that oc
 
 - The WordPress companion stores persistent receipts by normalized source URL and content hash.
 - An atomic source lock prevents overlapping publishing requests from creating duplicates.
-- Receipt retries return the existing post even after the local cache is lost.
+- Receipt retries return the existing post even after the local cache is lost. An authoritative WordPress search also blocks exact normalized duplicate headlines across different source URLs before taxonomy or media writes; similar headlines still need editorial review.
 - A source update is held locally with the original post ID. It never silently overwrites an editor's changes or creates a draft.
 - The old SQLite `processed_entries` table is preserved. Existing GUID/post pairs are adopted into server receipts without republishing.
 - Validation failures get one correction attempt using the failure reason and original evidence; every attempt repeats all factual, numeric and quotation checks. Both attempts count toward the existing run/per-feed model budgets. If that budget is exhausted, the second attempt resumes next run. After two failed attempts for an unchanged input, the item stays held and its reason remains visible without repeated model charges.
 - A missing/temporarily unavailable source image is checked up to three times, at least 30 minutes apart, before staying held. Image checks do not spend model tokens. Changed source/image input, prompts, models or policy can reopen a held item.
 - Eligible entries across all feeds are processed oldest first, rather than always favoring the top of `feeds.txt`. Items beyond the model budget are explicitly reported as deferred for the next run. The freshness window still applies: deferred items must remain available in the feed and within `MAX_AGE_HOURS` (24 by default). Persistent deferrals call for reviewing throughput or the window.
-- Approved-source text has no arbitrary minimum word count. Even a short complete notice goes through extraction and verification; empty text, placeholders and unsupported expansions cannot publish.
-- Specific safety advisories can publish as attributed briefs without inventing an incident, date or campaign. If the writer adds a sentence period inside an otherwise exact quotation, the period moves outside the quotation before verification; changed quoted words remain blocked.
+- Thin sources are rejected before image downloads and paid model attempts. Rejections are cached, reported and reconsidered when input or prompt policy changes. Missing information is never synthesized to satisfy the gate.
+- Safety advisories must satisfy the same complete-story gate; generic reminders and sparse notices stay unpublished. If the writer adds a sentence period inside an otherwise exact quotation, the period moves outside the quotation before verification; changed quoted words remain blocked.
 - Existing-post updates are cached and do not consume the model-attempt budget. Legacy adoption records the source content hash, so rotating feed metadata does not become a false article correction. Missing-image checks also do not consume paid model attempts; run summaries include rejection reasons.
 - Image upload failures, API failures and failed checks never fall through to publication.
-- The Actions schedule runs every 15 minutes, offset from the hour. A concurrency group prevents overlap; the job has a 20-minute limit. Partial feed failures produce a failing run instead of a misleading green success.
+- The Actions schedule runs at minute 17 every two hours (UTC), with eight model attempts and three attempts per feed by default. Repository variables can override attempt budgets. Manual runs default to preview. Preview runs do not save the publishing cache. A concurrency group prevents overlap; the job has a 30-minute limit. Partial feed failures produce a failing run instead of a misleading green success.
 - Dependencies are locked; CI runs Python regression tests plus PHP syntax and companion contract tests.
 - Logs, evidence records and a run summary are retained as artifacts for 14 days. Every run lists each configured feed, its read status, eligible/old/invalid counts and publication outcomes. Held and deferred items also produce a GitHub warning and a readable job summary, including holds restored from the database cache. No credentials are written to them.
 - Email sending was removed from the processing path. The old email helper remains as an unused historical module. Use GitHub Actions notification settings for run failures.

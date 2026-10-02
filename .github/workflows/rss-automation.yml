@@ -2,13 +2,13 @@ name: RSS to WordPress Automation
 
 on:
   schedule:
-    - cron: '7,22,37,52 * * * *'
+    - cron: '17 */2 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
         description: 'Preview locally in run artifacts without publishing'
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -48,7 +48,8 @@ jobs:
           EXTRACTION_MODEL: gpt-5-nano
           DRAFTING_MODEL: gpt-5.6-luna
           CATEGORY_IDS_JSON: ${{ vars.CATEGORY_IDS_JSON || '{}' }}
-          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '30' }}
+          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '8' }}
+          MAX_ENTRIES_PER_FEED: ${{ vars.MAX_ENTRIES_PER_FEED || '3' }}
           MAX_RUN_SECONDS: ${{ vars.MAX_RUN_SECONDS || '600' }}
           DRY_RUN: ${{ inputs.dry_run || false }}
         shell: bash
@@ -59,7 +60,7 @@ jobs:
             python main.py
           fi
       - name: Save local cache
-        if: always()
+        if: always() && inputs.dry_run != true
         uses: actions/cache/save@v4
         with:
           path: processed.db

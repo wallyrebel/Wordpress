@@ -28,15 +28,15 @@ class Config:
     wp_username: str
     wp_app_password: str
     rss_feeds: list[str]
-    poll_interval_minutes: int = 15
+    poll_interval_minutes: int = 120
     image_dir: str = "./images"
     database_path: str = "./processed.db"
     extraction_model: str = "gpt-5-nano"
     drafting_model: str = "gpt-5.6-luna"
     publish_mode: str = "auto"
-    max_posts_per_run: int = 30
+    max_posts_per_run: int = 8
     max_run_seconds: int = 600
-    max_entries_per_feed: int = 25
+    max_entries_per_feed: int = 3
     max_age_hours: int = 24
     review_dir: str = "./review"
     sources: dict[str, SourcePolicy] = field(default_factory=dict)
@@ -90,12 +90,12 @@ def load_config(require_wp=True):
         return value
     return Config(os.getenv("OPENAI_API_KEY", ""), wp_url, os.getenv("WP_USERNAME", ""),
         os.getenv("WP_APP_PASSWORD", ""), feeds,
-        poll_interval_minutes=positive("POLL_INTERVAL_MINUTES", 15),
+        poll_interval_minutes=positive("POLL_INTERVAL_MINUTES", 120),
         image_dir=os.getenv("IMAGE_DIR", "./images"), database_path=os.getenv("DATABASE_PATH", "./processed.db"),
         extraction_model=os.getenv("EXTRACTION_MODEL", "gpt-5-nano"),
         drafting_model=os.getenv("DRAFTING_MODEL", "gpt-5.6-luna"), publish_mode=mode,
-        max_posts_per_run=positive("MAX_POSTS_PER_RUN", 30),
+        max_posts_per_run=positive("MAX_POSTS_PER_RUN", 8),
         max_run_seconds=positive("MAX_RUN_SECONDS", 600),
-        max_entries_per_feed=positive("MAX_ENTRIES_PER_FEED", 25),
+        max_entries_per_feed=positive("MAX_ENTRIES_PER_FEED", 3),
         max_age_hours=positive("MAX_AGE_HOURS", 24), sources=sources, category_ids=categories,
         review_dir=os.getenv("REVIEW_DIR", "./review"))

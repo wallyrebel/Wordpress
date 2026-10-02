@@ -93,7 +93,8 @@ def fetch_feeds_with_raw(feed_urls, max_entries_per_feed=25, max_age_hours=24, s
                     stats["invalid_entries"] = stats.get("invalid_entries", 0) + 1
                     detail["invalid"] += 1
                     continue
-                timestamp = entry.updated or entry.published
+                # A syndicator refreshing an old item must not make old news new.
+                timestamp = entry.published or entry.updated
                 if not timestamp or timestamp > now + timedelta(minutes=15):
                     stats["undated_or_future"] = stats.get("undated_or_future", 0) + 1
                     detail["undated_or_future"] += 1
