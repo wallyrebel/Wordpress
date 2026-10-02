@@ -4,6 +4,7 @@ import html
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -372,13 +373,18 @@ def rewrite_article(title, content, link, openai_client, *,
     if format == "brief" and (word_count(source) < 45 or len(source) > max_source_chars):
         raise InsufficientSource("Brief source lacks enough text or exceeds source limit")
     usage = []
-    extract_prompt = EXTRACT_PROMPT
+    current_time = datetime.now(timezone.utc).isoformat()
+    time_guidance = ('\ncurrent_time is the intended publication time. Use it to reject expired '
+        'event previews and notices presented as upcoming. It is not evidence of an event date. '
+        'A current report about a past incident or an ongoing appeal can still be useful; '
+        'never infer that an unresolved case is closed merely because its incident date is old.')
+    extract_prompt = EXTRACT_PROMPT + time_guidance
     if format == 'brief':
         extract_prompt = extract_prompt.replace('useful full article', 'useful public-service brief of 70-250 words')
         extract_prompt += '\nAssess substantive for this BRIEF format: four distinct actionable facts can be enough. A dated free community event with location and participation details is useful service information, not merely an advertisement. Keep when/where explicit; never invent missing facts.'
     extraction = _call(openai_client, extraction_model, "low", Extraction,
         extract_prompt, {"title": title, "source_text": source, "source_url": link,
-        "publisher": publisher, "source_date": source_date,
+        "publisher": publisher, "source_date": source_date, "current_time": current_time,
         "approved_primary_source": approved_primary_source,
         "previous_validation_error": correction_feedback[:2000]}, 3500, usage)
     if not extraction.mississippi_relevant:
@@ -396,13 +402,13 @@ def rewrite_article(title, content, link, openai_client, *,
             raise ModelOutputError("Evidence quotation absent from source")
         fact.evidence = exact_evidence
     check_completeness(extraction, format)
-    draft_prompt = DRAFT_PROMPT
-    verify_prompt = VERIFY_PROMPT
+    draft_prompt = DRAFT_PROMPT + time_guidance
+    verify_prompt = VERIFY_PROMPT + time_guidance
     if format == "brief":
-        draft_prompt = DRAFT_PROMPT.replace("Write 300-500 BODY words", "Write 70-250 BODY words").replace(
+        draft_prompt = draft_prompt.replace("Write 300-500 BODY words", "Write 70-250 BODY words").replace(
             "reach 300 words", "reach 70 words").replace("Use 4-8 useful paragraphs", "Use 2-5 useful paragraphs")
         draft_prompt += "\nThis is an actionable public-service brief. Report the concrete alert, service details or crime development concisely. Cover who, what, where and when. Explain the stated purpose or public impact if supplied; do not invent a cause or criminal motive. An absent why is permitted for this brief."
-        verify_prompt = VERIFY_PROMPT.replace("who, what, where, when and why", "who, what, where and when")
+        verify_prompt = verify_prompt.replace("who, what, where, when and why", "who, what, where and when")
         verify_prompt += "\nFor this public-service brief, an unknown or unreported reason/motive does not disqualify a useful alert or crime update. Require concrete service/safety/case details. Do not demand padding or a 300-word length. Reject stale alerts or a routine promotional item misclassified as public service."
     if correction_feedback:
         draft_prompt += "\nA previous attempt failed validation. Address the supplied previous_validation_error using ONLY the original evidence. Omit unsupported details; never invent facts to satisfy a check. All original rules still apply."
@@ -410,7 +416,8 @@ def rewrite_article(title, content, link, openai_client, *,
             draft_prompt += "\nThe previous quote was not exact. Summarize that passage without quotation marks instead of attempting to repair its wording."
     draft = _call(openai_client, drafting_model, "none", Draft, draft_prompt,
         {"evidence": extraction.model_dump(), "source_text": source,
-         "source_url": link, "publisher": publisher,
+         "source_url": link, "publisher": publisher, "source_date": source_date,
+         "current_time": current_time,
          "previous_validation_error": correction_feedback[:2000]}, 2200, usage)
     # Some drafts repeat schema references as [f1] in prose. Those are internal
     # bookkeeping, not source quotations or reader-facing citations.
@@ -444,7 +451,7 @@ def rewrite_article(title, content, link, openai_client, *,
         source, re.I))
     verification = _call(openai_client, extraction_model, "medium" if sensitive else "low", Verification,
         verify_prompt, {"source_text": source, "source_url": link,
-        "publisher": publisher, "source_date": source_date,
+        "publisher": publisher, "source_date": source_date, "current_time": current_time,
         "approved_primary_source": approved_primary_source,
         "five_ws": extraction.five_ws.model_dump(),
         "facts": extraction.model_dump()["facts"],

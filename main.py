@@ -429,7 +429,8 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
         for entry,*_ in selected or candidates:
             report(entry,'roundup_pending',str(exc))
         if key:
-            write_json(Path(config.review_dir)/(key+'.json'),{'status':'roundup_pending','reason':str(exc),'sources':sources})
+            write_json(Path(config.review_dir)/(key+'.json'),{'status':'roundup_pending','reason':str(exc),
+                'sources':sources,'diagnostics':getattr(exc,'evidence',{})})
     except Exception as exc:
         stats['errors'] += 1
         logger.error('Roundup held: %s',type(exc).__name__)

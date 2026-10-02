@@ -21,6 +21,9 @@ depth and coverage. A single 300-word minimum is no longer applied to every stor
   Invalid extracted sections are omitted individually; at least three valid
   sections must remain before drafting. Rejected sources are not sent to the
   writer. A malformed item cannot supply facts or block unrelated valid sections.
+  A failed draft receives one bounded correction attempt against the same source
+  packets. Both attempts must satisfy every evidence and length check. Failed
+  repairs remain held with the draft and extraction available for diagnosis.
 
 Brief candidates receive priority. One of the existing bounded model pipelines
 is reserved for a roundup when the feeds contain enough smaller candidates.

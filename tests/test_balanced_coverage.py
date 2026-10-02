@@ -201,8 +201,47 @@ class BalancedCoverageTests(unittest.TestCase):
         sources,p,d = bundle()
         sources[1]['text'] += ' There are 765 books.'
         d.sections[0].draft.paragraphs[0].text += ' There are 765 books.'
-        with self.assertRaisesRegex(ModelOutputError,'assigned source'):
+        with self.assertRaisesRegex(ModelOutputError,'numbers absent from source'):
             validate_sections(sources,p,d)
+
+    def test_roundup_repairs_draft_once_without_reextracting_sources(self):
+        import json
+        sources,p,d = bundle()
+        bad = copy.deepcopy(d)
+        bad.sections[0].draft.paragraphs[0].text += ' There are 765 books.'
+        client = Mock()
+        client.responses.parse.side_effect = [SimpleNamespace(status='completed',usage=None,output_parsed=v)
+            for v in (p,bad,d,Verification(supported=True,issues=[],quality_passed=True))]
+        result = rewrite_roundup(sources,client,'nano','writer')
+        self.assertEqual(result.evidence['draft_repairs'],1)
+        self.assertNotIn('765',result.body)
+        repair = client.responses.parse.call_args_list[2].kwargs
+        self.assertIsInstance(repair['input'][0]['content'],str)
+        payload = json.loads(repair['input'][1]['content'])
+        self.assertIn('source0: 765',payload['previous_validation_error'])
+        self.assertEqual(payload['sources'],sources)
+        self.assertEqual(client.responses.parse.call_count,4)
+
+    def test_failed_roundup_repair_stays_held_with_diagnostics(self):
+        sources,p,d = bundle()
+        d.sections[0].draft.paragraphs[0].text += ' There are 765 books.'
+        client = Mock()
+        client.responses.parse.side_effect = [SimpleNamespace(status='completed',usage=None,output_parsed=v)
+            for v in (p,d,d)]
+        with self.assertRaisesRegex(ModelOutputError,'source0: 765') as caught:
+            rewrite_roundup(sources,client,'nano','writer')
+        self.assertIn('roundup_draft',caught.exception.evidence)
+        self.assertEqual(client.responses.parse.call_count,3)
+
+    def test_standalone_verifier_gets_actual_publication_time(self):
+        import json
+        client = fixtures.fake_client()
+        with patch('ai_rewriter.datetime') as clock:
+            clock.now.return_value = datetime(2026,10,2,16,0,tzinfo=timezone.utc)
+            rewrite_article('Notice',fixtures.SOURCE,'https://example.org',client)
+        for call in client.responses.parse.call_args_list:
+            payload = json.loads(call.kwargs['input'][1]['content'])
+            self.assertEqual(payload['current_time'],'2026-10-02T16:00:00+00:00')
 
     def test_duplicate_source_sections_do_not_make_a_roundup(self):
         sources,p,d = bundle()
