@@ -17,6 +17,9 @@ depth and coverage. A single 300-word minimum is no longer applied to every stor
   checked against that section's source, then the whole draft is verified for
   accuracy, relevance, duplicate events and useful detail. Sensitive crime,
   emergency and medical items are excluded from general roundups.
+  Invalid extracted sections are omitted individually; at least three valid
+  sections must remain before drafting. Rejected sources are not sent to the
+  writer. A malformed item cannot supply facts or block unrelated valid sections.
 
 Brief candidates receive priority. One of the existing bounded model pipelines
 is reserved for a roundup when the feeds contain enough smaller candidates.
@@ -31,7 +34,9 @@ Install companion plugin 1.0.2 before enabling this exception in production.
 
 Source receipts prevent republishing members of a briefing as new standalone
 stories. Exact source-attribution lookup recovers coverage if a runner stopped
-before writing every member receipt. The briefing date is a compilation date,
+before writing every member receipt. The briefing date uses America/Chicago,
+including daylight saving time, and is supplied to the writer and verifier for
+freshness checks. It is a compilation date,
 not the date of every event. At most one community and one sports briefing with
 the same compilation date can pass the exact-headline publication check.
 
