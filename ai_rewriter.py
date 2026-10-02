@@ -234,7 +234,9 @@ def check_completeness(extraction, format="full"):
         if not refs and (format == "full" or question != "why"):
             raise InsufficientSource("Missing source-backed " + question)
         if not set(refs) <= facts.keys():
-            raise ModelOutputError("Unknown five-W supporting fact IDs")
+            raise ModelOutputError("Unknown five-W supporting fact IDs for " + question
+                + ": " + repr(sorted(set(refs) - facts.keys()))[:160]
+                + "; use only " + repr(list(facts))[:160])
 
 def check_body_quality(paragraphs, five_ws, format="full"):
     body = " ".join(p.text for p in paragraphs)
@@ -316,6 +318,16 @@ def check_direct_quotes(text, source):
 def numeric_tokens(value):
     # Calendar ordinals (October 1st -> Oct. 1) retain exactly the same number.
     value = re.sub(r"\b(\d+)(?:st|nd|rd|th)\b", r"\1", value, flags=re.I)
+    # Preserve month/day identity across numeric and named US calendar dates.
+    # Do not merely allow each component: that would hide changed months/days.
+    months = {name: i for i, name in enumerate(
+        ('jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'), 1)}
+    value = re.sub(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+                   r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember|t)?|Oct(?:ober)?|"
+                   r"Nov(?:ember)?|Dec(?:ember)?)\.?\s+(0?[1-9]|[12]\d|3[01])\b",
+        lambda m: f"{months[m.group(1)[:3].lower()]}/{int(m.group(2))}", value, flags=re.I)
+    value = re.sub(r"\b(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])\b",
+                   lambda m: f"{int(m.group(1))}/{int(m.group(2))}", value)
     # Police releases often join the meridiem to the time ("1:56am"). Without
     # a boundary, the numeric regex backtracks and reads that as just "1".
     value = re.sub(r"(?<=\d)(?=[ap]\.?m\.?(?:\b|$))", " ", value, flags=re.I)

@@ -60,6 +60,13 @@ class BalancedCoverageTests(unittest.TestCase):
         self.assertEqual(numeric_tokens('October 1st and 22nd'),numeric_tokens('Oct. 1 and 22'))
         self.assertNotEqual(numeric_tokens('October 1st'),numeric_tokens('Oct. 2'))
 
+    def test_calendar_formats_preserve_both_month_and_day(self):
+        self.assertEqual(numeric_tokens('10/08'), numeric_tokens('Oct. 8th'))
+        self.assertEqual(numeric_tokens('October 8, 2026'), numeric_tokens('10/8, 2026'))
+        self.assertNotEqual(numeric_tokens('10/8'), numeric_tokens('Nov. 8'))
+        self.assertNotEqual(numeric_tokens('10/8'), numeric_tokens('Oct. 9'))
+        self.assertEqual(numeric_tokens('601-555-0108; 10:08am'), {'601-555-0108','10:08'})
+
     def test_verified_brief_publishes_without_a_photo(self):
         fixture = fixtures.PublishingTests()
         fixture.setUp()
@@ -111,11 +118,44 @@ class BalancedCoverageTests(unittest.TestCase):
         with self.assertRaisesRegex(ModelOutputError,'differs'):
             validate_publication_article(replace(article,body=article.body+'<p>Extra claim.</p>'))
 
+    def test_briefing_date_uses_mississippi_calendar_not_utc(self):
+        sources,p,d = bundle()
+        client = roundup_client(p,d)
+        with patch('roundups.datetime') as clock:
+            clock.now.return_value = datetime(2026,10,3,1,0,tzinfo=timezone.utc)
+            article = rewrite_roundup(sources,client,'nano','writer')
+        self.assertTrue(article.headline.endswith('October 2, 2026'))
+        import json
+        for call in client.responses.parse.call_args_list:
+            payload = json.loads(call.kwargs['input'][1]['content'])
+            self.assertEqual(payload['compiled_at'],'2026-10-02T20:00:00-05:00')
+
     def test_roundup_cannot_borrow_evidence_from_another_source(self):
         sources,p,d = bundle()
         p.sections[0].extraction.facts[0].evidence = p.sections[1].extraction.facts[0].evidence
-        with self.assertRaisesRegex(ModelOutputError,'own source'):
+        with self.assertRaisesRegex(InsufficientSource,'own source'):
             rewrite_roundup(sources,roundup_client(p,d),'nano','writer')
+
+    def test_invalid_fourth_section_does_not_suppress_three_valid_items(self):
+        for failure in ('unknown_fact', 'invented_evidence'):
+            with self.subTest(failure=failure):
+                sources,p,d = bundle()
+                bad = copy.deepcopy(p.sections[0])
+                bad.source_id = 'rejected'
+                if failure == 'unknown_fact':
+                    bad.extraction.five_ws.when = ['invented-id']
+                else:
+                    bad.extraction.facts[0].evidence = 'This evidence is absent from the source.'
+                p.sections.append(bad)
+                sources.append({**sources[0], 'source_id':'rejected','url':'https://example.org/rejected'})
+                client = roundup_client(p,d)
+                article = rewrite_roundup(sources,client,'nano','writer')
+                validate_publication_article(article)
+                self.assertEqual(len(article.evidence['sources']),3)
+                self.assertNotIn('https://example.org/rejected',article.body)
+                import json
+                payload = json.loads(client.responses.parse.call_args_list[1].kwargs['input'][1]['content'])
+                self.assertNotIn('rejected',[s['source_id'] for s in payload['sources']])
 
     def test_roundup_cannot_borrow_numbers_from_another_source(self):
         sources,p,d = bundle()
