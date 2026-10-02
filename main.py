@@ -19,7 +19,7 @@ from database import Store
 from feed_parser import fetch_feeds_with_raw, enrich_entry
 from image_handler import get_source_image, IMAGE_POLICY_VERSION
 from wordpress_api import WordPressAPI, safe_http_details
-from roundups import rewrite_roundup
+from roundups import rewrite_roundup, candidate_group
 
 logger = logging.getLogger(__name__)
 MAX_ITEM_MODEL_ATTEMPTS = 2
@@ -346,8 +346,17 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
         if stats['model_attempts'] >= stats['model_attempt_budget'] or time.monotonic()-started >= config.max_run_seconds:
             raise InsufficientSource('Roundup deferred until next run: processing budget reached')
         # Prefer enough factual material; cap each feed's contribution for source diversity.
+        groups = {}
+        for item in candidates:
+            group = candidate_group(item[0],item[2])
+            if group:
+                groups.setdefault(group,[]).append(item)
+        pools = [items for items in groups.values() if len(items) >= 3]
+        if not pools:
+            raise InsufficientSource('Roundup waiting for three compatible non-sensitive items')
+        pool = max(pools,key=lambda items:sum(sorted((word_count(i[0].content) for i in items),reverse=True)[:6]))
         counts = {}
-        for item in sorted(candidates, key=lambda c: (-word_count(c[0].content), c[0].link)):
+        for item in sorted(pool, key=lambda c: (-word_count(c[0].content), c[0].link)):
             if time.monotonic()-started >= config.max_run_seconds:
                 raise InsufficientSource('Roundup deferred until next run: processing budget reached')
             entry, raw, policy, original_hash, digest = item
@@ -419,7 +428,7 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
         for entry,*_ in selected or candidates:
             report(entry,'roundup_pending',str(exc))
         if key:
-            write_json(Path(config.review_dir)/(key+'.json'),{'status':'roundup_pending','reason':str(exc)})
+            write_json(Path(config.review_dir)/(key+'.json'),{'status':'roundup_pending','reason':str(exc),'sources':sources})
     except Exception as exc:
         stats['errors'] += 1
         logger.error('Roundup held: %s',type(exc).__name__)

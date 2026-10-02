@@ -27,6 +27,20 @@ class RoundupDraft(StrictModel):
     sections: list[WrittenSection]
 
 
+def candidate_group(entry, policy):
+    """Keep obvious sensitive items out before they displace useful sections."""
+    text = clean_text(entry.title + ' ' + entry.content)
+    publisher = policy.publisher or entry.publisher
+    if (policy.category in ('Crime & Courts', 'Politics', 'Health', 'Weather')
+            or re.search(r'\b(police|sheriff|corrections|crime stoppers)\b', publisher, re.I)
+            or re.search(r'\b(arrest\w*|charged|murder|homicide|killed|died|death|missing|'
+                         r'evacuat\w*|tornado|medical|alleg\w*|election)\b', text, re.I)):
+        return None
+    return 'sports' if policy.category == 'Sports' or re.search(
+        r'\b(football|soccer|volleyball|basketball|baseball|softball|cross country|'
+        r'athletes?|touchdowns?|quarterback|tournament|overtime)\b', text, re.I) else 'community'
+
+
 def validate_sections(sources, extracted, drafted):
     source_map = {s['source_id']: s for s in sources}
     facts_map = {s.source_id: s.extraction for s in extracted.sections}
@@ -116,7 +130,7 @@ def rewrite_roundup(sources, client, extraction_model, drafting_model):
         raise InsufficientSource('Not enough source material for a useful roundup')
     usage = []
     extracted = _call(client, extraction_model, 'low', RoundupExtraction,
-        EXTRACT_PROMPT + '\nExtract each source separately under its source_id. Omit teasers, praise, ads, duplicate events, or items lacking who/what/where/when. Each evidence quote must come from THAT source only. A concise useful community or sports update can be substantive in this briefing. Omit sensitive crime, medical and emergency items: those need standalone public-service coverage. Select a coherent community briefing or sports briefing, without pretending different events are related.',
+        EXTRACT_PROMPT + '\nExtract each source separately under its source_id, using 3-7 distinct useful facts per selected item. Omit teasers, praise, ads, duplicate events, or items lacking who/what/where/when. Each evidence quote must come from THAT source only. A concise useful community or sports update can be substantive in this briefing. Omit sensitive crime, medical and emergency items: those need standalone public-service coverage. Select a coherent community briefing or sports briefing, without pretending different events are related.',
         {'sources':sources}, 12000, usage)
     source_map = {s['source_id']:s for s in sources}
     accepted = []

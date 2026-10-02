@@ -9,6 +9,7 @@ from ai_rewriter import (Extraction, Verification, InsufficientSource, ModelOutp
 from ai_rewriter import numeric_tokens
 from roundups import (RoundupExtraction, ExtractedSection, RoundupDraft, WrittenSection,
     rewrite_roundup, validate_sections)
+from roundups import candidate_group
 from main import run_feed_processing, run_roundup, source_key
 from wordpress_api import WordPressAPI
 import test_workflow as fixtures
@@ -45,6 +46,16 @@ def roundup_client(extracted, drafted, verification=None):
 
 
 class BalancedCoverageTests(unittest.TestCase):
+    def test_sensitive_sources_cannot_displace_roundup_coverage(self):
+        entry = SimpleNamespace(title='Community visit',content='Useful details',publisher='County Sheriff')
+        policy = SimpleNamespace(category='Mississippi News',publisher='')
+        self.assertIsNone(candidate_group(entry,policy))
+        entry.publisher = 'College Athletics'
+        entry.content = 'The volleyball tournament is on October 3.'
+        self.assertEqual(candidate_group(entry,policy),'sports')
+        entry.content = 'The library sale is on October 3.'
+        self.assertEqual(candidate_group(entry,policy),'community')
+
     def test_ordinal_calendar_day_can_be_written_in_ap_style(self):
         self.assertEqual(numeric_tokens('October 1st and 22nd'),numeric_tokens('Oct. 1 and 22'))
         self.assertNotEqual(numeric_tokens('October 1st'),numeric_tokens('Oct. 2'))
