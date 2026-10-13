@@ -101,6 +101,8 @@ def main():
             eligibility = capability_check(account, before)
             entry = {'id': target['id'], 'url': target['link'], 'before': saved, 'before_sha256': digest(saved), 'capability': eligibility}
             try:
+                if target.get('expected_before_sha256') and digest(saved) != target['expected_before_sha256']:
+                    raise ValueError('Original approved before digest or revision changed')
                 payload = proposed(before, target)
                 if payload and not eligibility['eligible_from_capabilities']:
                     raise ValueError('Account capabilities do not permit this existing published post')

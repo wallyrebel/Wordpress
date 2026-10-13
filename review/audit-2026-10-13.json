@@ -26,12 +26,22 @@
               "William Carey women's volleyball",
               "William Carey women&#8217;s volleyball"
             ]
+          },
+          {
+            "old": "The four-set comeback is the result reported by Sports Mississippi; its account does not provide individual player statistics.",
+            "new": "Sports Mississippi has a full report on the four-set comeback.",
+            "count": 1
           }
         ]
       },
       "sources": [
         "https://alcornsports.com/news/2026/10/11/womens-volleyball-lady-braves-rally-from-first-set-loss-to-beat-mvsu.aspx"
-      ]
+      ],
+      "expected_before_sha256": "a7a2a7d723c8b581da7d5fef22b4c18f18d2f7e1f335db1412cbea26a9ac1979",
+      "append": {
+        "content": "<p><em>Correction (Oct. 13, 2026): The volleyball team that defeated Mississippi Valley State was Alcorn State. An earlier version incorrectly named William Carey.</em></p>"
+      },
+      "approval_note": "Parent-approved dated factual correction note; original before/revision digest preserved. Parent explicitly approved removing the stale no-statistics clause."
     },
     {
       "id": 33788,
@@ -52,7 +62,12 @@
       },
       "sources": [
         "https://www.facebook.com/1263353712506260/posts/1487719493403013"
-      ]
+      ],
+      "expected_before_sha256": "163959f918e7e07a393b54e4d2a3af1ae3b1cc7643f5d6b685d5f15cda711a49",
+      "append": {
+        "content": "<p><em>Correction (Oct. 13, 2026): The reported shed burglary occurred early Saturday, Oct. 10. An earlier version incorrectly gave Sunday as the incident day.</em></p>"
+      },
+      "approval_note": "Parent-approved dated factual correction note; original before/revision digest preserved."
     }
   ]
 }
