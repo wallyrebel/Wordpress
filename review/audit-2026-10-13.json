@@ -1,0 +1,58 @@
+{
+  "site": "https://msnewsgroup.com",
+  "repository": "wallyrebel/Wordpress",
+  "mode": "read-only",
+  "posts": [
+    {
+      "id": 33797,
+      "link": "https://msnewsgroup.com/mississippinews/mississippi-news-sports-rundown-2026-10-12/",
+      "rendered_sha256": {
+        "title": "5deecf2bc0f9d8b1a85c6dfe8c072fe27485cfeb47df37a72ecc2c0c44732ed5",
+        "excerpt": "dc2ef82684997701ae1b9cb2b5fe4e80705207b52afbb8a965820d7c97dd2ea3",
+        "content": "6897d1b46b665c7d7e2ab9620d6dd80e55851d71b6694f9290db4f7971d092d8"
+      },
+      "replacements": {
+        "content": [
+          {
+            "old": "William Carey rallies past Mississippi Valley State",
+            "new": "Alcorn State rallies past Mississippi Valley State",
+            "count": 1
+          },
+          {
+            "old": "William Carey women’s volleyball",
+            "new": "Alcorn State women’s volleyball",
+            "count": 1,
+            "variants": [
+              "William Carey women's volleyball",
+              "William Carey women&#8217;s volleyball"
+            ]
+          }
+        ]
+      },
+      "sources": [
+        "https://alcornsports.com/news/2026/10/11/womens-volleyball-lady-braves-rally-from-first-set-loss-to-beat-mvsu.aspx"
+      ]
+    },
+    {
+      "id": 33788,
+      "link": "https://msnewsgroup.com/mississippinews/mississippi-news-sports-rundown-2026-10-11/",
+      "rendered_sha256": {
+        "title": "208ab28c0d924c343ad39bf884731bf5750b6c5d96b3998d66e4c0166b160da8",
+        "excerpt": "a30dfb6955b6e5b016e18c284c6c3b5db5566321890710783b096cfdb37f9d42",
+        "content": "0f66c8d480b84ada634b4c773f4da569d0bf86edb67287d7513a289900379da7"
+      },
+      "replacements": {
+        "content": [
+          {
+            "old": "early Sunday and took vehicle batteries",
+            "new": "early Saturday, Oct. 10, and took vehicle batteries",
+            "count": 1
+          }
+        ]
+      },
+      "sources": [
+        "https://www.facebook.com/1263353712506260/posts/1487719493403013"
+      ]
+    }
+  ]
+}
