@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Preview locally in run artifacts without publishing'
+        description: 'Authenticated read-only coverage reconciliation and editorial/image previews'
         type: boolean
         default: true
 
@@ -21,6 +21,9 @@ jobs:
   publish-articles:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      # Read-only until the first authenticated preview is reviewed.
+      PUBLISHER_LIVE: 'false'
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
@@ -45,8 +48,10 @@ jobs:
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           PUBLISH_MODE: auto
-          EXTRACTION_MODEL: gpt-5-nano
-          DRAFTING_MODEL: gpt-5.6-luna
+          EXTRACTION_MODEL: gpt-6-luna
+          DRAFTING_MODEL: gpt-6-luna
+          DAILY_ARTICLE_GOAL: '5'
+          MAX_NEW_POSTS_PER_RUN: '2'
           CATEGORY_IDS_JSON: ${{ vars.CATEGORY_IDS_JSON || '{}' }}
           MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '8' }}
           MAX_ENTRIES_PER_FEED: ${{ vars.MAX_ENTRIES_PER_FEED || '3' }}
@@ -54,13 +59,13 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run || false }}
         shell: bash
         run: |
-          if [ "$DRY_RUN" = "true" ]; then
-            python main.py --dry-run
+          if [ "$DRY_RUN" = "true" ] || [ "$PUBLISHER_LIVE" != "true" ]; then
+            python main.py --authenticated-preview
           else
             python main.py
           fi
       - name: Save local cache
-        if: always() && inputs.dry_run != true
+        if: always() && inputs.dry_run != true && env.PUBLISHER_LIVE == 'true'
         uses: actions/cache/save@v6.1.0
         with:
           path: processed.db
@@ -75,5 +80,6 @@ jobs:
           name: news-review-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             review/
+            images/
             rss_automation.log
           retention-days: 14

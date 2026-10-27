@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nano extraction -> Luna drafting -> Nano verification -> WordPress receipt."""
+"""Luna extraction -> Luna drafting -> Luna verification -> reconciled WordPress receipt."""
 import argparse
 import hashlib
 import html
@@ -20,6 +20,7 @@ from feed_parser import fetch_feeds_with_raw, enrich_entry
 from image_handler import get_source_image, IMAGE_POLICY_VERSION
 from wordpress_api import WordPressAPI, safe_http_details
 from roundups import rewrite_roundup, candidate_group
+from editorial_safety import restricted_source, event_conflict
 
 logger = logging.getLogger(__name__)
 MAX_ITEM_MODEL_ATTEMPTS = 2
@@ -61,16 +62,20 @@ def publication_status(article, policy, config, category_ids):
         return "publish"
     return "hold"
 
-def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None):
+def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None, authenticated_preview=False):
     started = time.monotonic()
     stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0,
              "duplicates": 0, "source_updates": 0, "model_attempts": 0,
              "reasons": {}, "model_attempt_budget": limit or config.max_posts_per_run,
              "max_run_seconds": config.max_run_seconds, "feeds_configured": len(config.rss_feeds)}
+    stats['publication_mode'] = 'authenticated-preview' if authenticated_preview else 'offline-preview' if dry_run else 'live'
+    stats['daily_goal'] = config.daily_article_goal
+    stats['max_new_posts_per_run'] = config.max_new_posts_per_run
     store = Store(config.database_path) if not dry_run else None
     client = client or OpenAI(api_key=config.openai_api_key, timeout=90, max_retries=2)
-    wp = wp or (None if dry_run else WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password))
+    wp = wp or (None if dry_run and not authenticated_preview else WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password))
     outcomes = []
+    setup_stage = 'WordPress health check'
     def observe(entry, status, reason="", cached=False):
         item = {"source_url": entry.link, "feed_url": entry.feed_url, "title": entry.title,
                 "publisher": entry.publisher, "status": status, "reason": reason, "cached": cached}
@@ -86,6 +91,11 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
     try:
         if wp:
             wp.test_connection()  # Fail before model spending if companion is missing.
+            setup_stage = 'authenticated all-status coverage reconciliation'
+            stats['reconciliation'] = wp.reconcile(config.daily_article_goal, config.reconciliation_anchor_ids)
+            stats['daily_before'] = stats['reconciliation']['daily']
+            write_json(Path(config.review_dir) / 'reconciliation-before.json', stats['reconciliation'])
+        setup_stage = 'configured source feed read'
         entries = fetch_feeds_with_raw(config.rss_feeds, config.max_entries_per_feed,
                                        config.max_age_hours, stats)
         # A fixed feed-list order let earlier busy sources starve later sources.
@@ -114,6 +124,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
             image_attempts = 0
             correction_feedback = ""
             stage = "publication receipt and cache"
+            receipt = None
             try:
                 cached = store.get(key) if store else None
                 if cached and cached.get("feed_hash") == original_hash:
@@ -160,6 +171,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     continue
                 stage = "source article enrichment"
                 entry = enrich_entry(entry, policy, raw)
+                if restricted_source(entry.title + ' ' + entry.content):
+                    raise InsufficientSource('Allegation or private-sensitive source requires separate editorial approval')
                 digest = fingerprint(entry.title, entry.content)
                 if digest in prior.get("versions", {}):
                     if store:
@@ -191,6 +204,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     check_source_length(entry.content)
                 if format == "full":
                     check_source_length(entry.content)
+                if not dry_run and stats['created'] >= config.max_new_posts_per_run:
+                    stats['deferred'] = stats.get('deferred', 0) + 1
+                    observe(entry, 'deferred', 'Controlled per-run publication limit reached; continue next scheduled run')
+                    continue
                 total_budget = limit or config.max_posts_per_run
                 # Reserve one bounded pipeline for combining useful smaller items.
                 standalone_budget = max(1, total_budget - int(roundup_possible))
@@ -202,6 +219,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 if feed_attempts.get(entry.feed_url, 0) >= config.max_entries_per_feed:
                     stats["deferred"] = stats.get("deferred", 0) + 1
                     observe(entry, "deferred", "Per-feed model-attempt budget reached; retry next run")
+                    continue
+                if wp and wp.find_source_publication(entry.link):
+                    stats['duplicates'] += 1
+                    observe(entry, 'duplicate', 'Source already linked by existing coverage in a supported post status')
                     continue
                 image_attempts += 1
                 stage = "source image selection"
@@ -236,11 +257,21 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                 if policy.category:
                     article = replace(article, category=policy.category)
                 validate_publication_article(article)
+                if wp:
+                    conflict = event_conflict(wp, entry, client, config.extraction_model)
+                    if conflict:
+                        raise InsufficientSource(conflict['reason'] + '; post IDs ' + ','.join(map(str, conflict['post_ids'])))
                 record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
                           "content_hash": digest, "source_text": clean_text(entry.content),
-                          "article": asdict(article)}
+                          "article": asdict(article), 'image': asdict(image) if image else None}
                 write_json(Path(config.review_dir) / (key + ".json"), record)
                 if dry_run:
+                    if wp:
+                        duplicate = wp.find_duplicate_headline(article.headline)
+                        if duplicate:
+                            observe(entry, 'duplicate', 'Headline already exists; post ID '+str(duplicate))
+                            stats['duplicates'] += 1
+                            continue
                     stats["previews"] += 1
                     stats[format + '_previews'] = stats.get(format + '_previews',0)+1
                     observe(entry, "preview")
@@ -256,6 +287,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     observe(entry, "held", "; ".join(record["reasons"]))
                     continue
                 stage = "duplicate headline check"
+                # Refresh other producers' output immediately before any media/taxonomy write.
+                wp.reconcile(config.daily_article_goal, config.reconciliation_anchor_ids)
+                if wp.find_source_publication(entry.link) or event_conflict(wp, entry, client, config.extraction_model):
+                    raise InsufficientSource('Coverage appeared during preparation; reconcile before publication')
                 duplicate = wp.find_duplicate_headline(article.headline)
                 if duplicate:
                     record.update(status="duplicate", duplicate_post_id=duplicate)
@@ -296,8 +331,13 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                     "evidence": article.evidence})
                 stage = "publication receipt persistence"
                 store.save(key, digest, {**receipt, "feed_hash": original_hash})
-                record["status"], record["receipt"] = receipt["status"], receipt
+                record["status"], record["receipt"] = 'published_unverified', receipt
                 write_json(Path(config.review_dir) / (key + ".json"), record)
+                stage = 'independent public verification'
+                from publication_verification import verify_article
+                record['public_verification'] = verify_article(wp, receipt, article, article.body + source_line, media_id, image)
+                record['status'] = 'publish'
+                write_json(Path(config.review_dir) / (key + '.json'), record)
                 stats["created"] += 1
                 stats[format + '_created'] = stats.get(format + '_created',0)+1
                 observe(entry, "publish")
@@ -336,13 +376,32 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None)
                         reason += " (" + details["api_error_code"] + ")"
                 logger.error("Item held; source=%s error=%s", key[:12], reason)
                 write_json(Path(config.review_dir) / (key + ".json"),
-                    {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__, **details})
+                    {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__,
+                     'receipt': receipt, **details})
                 observe(entry, "error", reason)
         if roundup_candidates:
             run_roundup(config, roundup_candidates, stats, started, dry_run, client, wp, store, observe)
         apply_feed_health(stats)
         return stats
+    except Exception as exc:
+        stats['errors'] += 1
+        stats['fatal_error'] = {'stage': setup_stage, 'error_type': type(exc).__name__, **safe_http_details(exc)}
+        return stats
     finally:
+        if wp:
+            usage = getattr(wp, 'event_check_usage', None)
+            if isinstance(usage, list):
+                stats['event_comparison_usage'] = usage
+            try:
+                reconciled = wp.reconcile(config.daily_article_goal, config.reconciliation_anchor_ids)
+                stats['daily_after'] = reconciled['daily']
+                write_json(Path(config.review_dir) / 'reconciliation-after.json', reconciled)
+                stats['daily_shortfall'] = reconciled['daily']['remaining']
+                stats['shortfall_action'] = ('Continue on the unchanged next two-hour schedule; inspect holds, source freshness and deferred items. Never bypass evidence or add filler.'
+                                            if stats['daily_shortfall'] else 'Daily goal met; further publication still requires distinct useful verified material.')
+            except Exception as exc:
+                stats['errors'] += 1
+                stats['daily_accounting_error'] = type(exc).__name__
         stats["elapsed_seconds"] = round(time.monotonic() - started, 2)
         if store:
             store.close()
@@ -357,12 +416,15 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
     sources = []
     key = None
     reported = set()
+    receipt = None
     def report(entry,status,reason):
         reported.add(source_key(entry))
         observe(entry,status,reason)
     try:
         if stats['model_attempts'] >= stats['model_attempt_budget'] or time.monotonic()-started >= config.max_run_seconds:
             raise InsufficientSource('Roundup deferred until next run: processing budget reached')
+        if not dry_run and stats['created'] >= config.max_new_posts_per_run:
+            raise InsufficientSource('Roundup deferred: controlled per-run publication limit reached')
         # Prefer enough factual material; cap each feed's contribution for source diversity.
         groups = {}
         for item in candidates:
@@ -385,9 +447,6 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
                 # and recording all member receipts, or the local DB was lost.
                 covered = wp.find_source_publication(entry.link)
                 if covered:
-                    receipt = wp.upsert({'source_key':source_key(entry),'content_hash':digest,
-                        'source_url':entry.link,'adopt_post_id':covered})
-                    store.save(source_key(entry),digest,{**receipt,'feed_hash':original_hash})
                     stats['duplicates'] += 1
                     report(entry,'duplicate','Source already included in a published story or briefing')
                     continue
@@ -408,18 +467,30 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
         validate_publication_article(article)
         used = {s['source_id'] for s in article.evidence['sources']}
         included = [item for item in selected if source_key(item[0]) in used]
+        if wp:
+            for entry, *_ in included:
+                conflict = event_conflict(wp, entry, client, config.extraction_model)
+                if conflict:
+                    raise InsufficientSource(conflict['reason'])
         record = {'status':'preview','article':asdict(article),'source_urls':[s['url'] for s in article.evidence['sources']]}
+        image = next((found for _,raw,policy,_,_ in included
+                      if (found := get_source_image(raw,policy,config.image_dir))),None)
+        record['image'] = asdict(image) if image else None
         write_json(Path(config.review_dir)/(key+'.json'),record)
         if dry_run:
+            if wp and wp.find_duplicate_headline(article.headline):
+                raise InsufficientSource('Briefing headline already exists in a supported post status')
             stats['previews'] += 1
             stats['roundup_previews'] = stats.get('roundup_previews',0)+1
             for entry,*_ in included:
                 report(entry,'preview','Included in verified multi-source briefing')
             return
+        wp.reconcile(config.daily_article_goal, config.reconciliation_anchor_ids)
+        if any(wp.find_source_publication(item[0].link) or event_conflict(wp, item[0], client, config.extraction_model)
+               for item in included):
+            raise InsufficientSource('Briefing source/event already covered; preserve existing posts')
         if wp.find_duplicate_headline(article.headline):
             raise InsufficientSource('A briefing for this section and compilation date is already published')
-        image = next((found for _,raw,policy,_,_ in included
-                      if (found := get_source_image(raw,policy,config.image_dir))),None)
         category_ids, tag_ids = wp.taxonomy(article.category,article.tags,config.category_ids)
         if not category_ids or not tag_ids:
             raise InsufficientSource('Roundup category or supported tags missing')
@@ -432,6 +503,10 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
             'categories':category_ids,'tags':tag_ids,'featured_media':media_id,'review_reasons':[],
             'source_published':(included[0][0].published or included[0][0].updated).isoformat(),
             'evidence':article.evidence})
+        record.update(status='published_unverified', receipt=receipt)
+        write_json(Path(config.review_dir)/(key+'.json'),record)
+        from publication_verification import verify_article
+        record['public_verification'] = verify_article(wp, receipt, article, article.body, media_id, image)
         stats['created'] += 1
         stats['roundups_created'] = stats.get('roundups_created',0)+1
         record.update(status='publish',receipt=receipt)
@@ -452,6 +527,9 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
     except Exception as exc:
         stats['errors'] += 1
         logger.error('Roundup held: %s',type(exc).__name__)
+        if key:
+            write_json(Path(config.review_dir)/(key+'.json'), {'status': 'error', 'receipt': receipt,
+                       'error_type': type(exc).__name__, 'reconcile_before_retry': True})
         for entry,*_ in selected or candidates:
             report(entry,'error','Roundup pipeline: '+type(exc).__name__)
     finally:
@@ -463,6 +541,7 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="Model calls and local previews only; no WP/DB writes")
+    parser.add_argument('--authenticated-preview', action='store_true', help='Read-only authenticated reconciliation plus model/image previews; no WP/DB writes')
     parser.add_argument("--max-items", type=int)
     parser.add_argument("--schedule", action="store_true")
     parser.add_argument("--test-connection", action="store_true")
@@ -474,12 +553,13 @@ def main():
     for name in ("openai", "httpx", "httpcore", "urllib3"):
         logging.getLogger(name).setLevel(logging.WARNING)
     try:
-        config = load_config(require_wp=not args.dry_run)
+        dry_run = args.dry_run or args.authenticated_preview
+        config = load_config(require_wp=not dry_run or args.authenticated_preview)
         if args.test_connection:
             WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password).test_connection()
             return 0
         while True:
-            stats = run_feed_processing(config, args.dry_run, args.max_items)
+            stats = run_feed_processing(config, dry_run, args.max_items, authenticated_preview=args.authenticated_preview)
             if not args.schedule:
                 return run_exit_code(stats)
             time.sleep(config.poll_interval_minutes * 60)

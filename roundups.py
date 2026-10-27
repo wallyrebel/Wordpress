@@ -61,7 +61,7 @@ def validate_sections(sources, extracted, drafted):
     for section in drafted.sections:
         source = source_map[section.source_id]['text']
         extraction = facts_map[section.source_id]
-        if extraction.sensitive:
+        if extraction.sensitive or extraction.restricted_content:
             raise ModelOutputError('Sensitive item requires standalone coverage')
         check_completeness(extraction, 'roundup_item')
         facts = {f.id: f for f in extraction.facts}
@@ -83,6 +83,8 @@ def validate_sections(sources, extracted, drafted):
             if not text.strip() or not refs or not set(refs) <= facts.keys() or re.search(r'<[^>]+>',text):
                 raise ModelOutputError('Invalid roundup paragraph or supporting IDs')
         combined = ' '.join([draft.headline,draft.excerpt]+[p.text for p in draft.paragraphs])
+        from editorial_safety import check_reader_text
+        check_reader_text(combined)
         check_direct_quotes(combined, source)
         unsupported = numeric_tokens(combined) - numeric_tokens(source)
         if unsupported:
@@ -173,7 +175,7 @@ def rewrite_roundup(sources, client, extraction_model, drafting_model):
             raise ModelOutputError('Unknown extracted roundup source')
         try:
             check_completeness(section.extraction, 'roundup_item')
-            if section.extraction.sensitive:
+            if section.extraction.sensitive or section.extraction.restricted_content:
                 raise InsufficientSource('sensitive standalone item')
             for fact in section.extraction.facts:
                 exact = source_evidence(fact.evidence, source_map[section.source_id]['text'])

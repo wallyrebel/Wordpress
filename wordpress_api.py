@@ -5,6 +5,8 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 import requests
 from requests.auth import HTTPBasicAuth
+from datetime import datetime, timedelta, timezone
+from coverage import CoverageIndex, linked_sources, source_identity, text_field
 
 def safe_http_details(exc):
     """Diagnostic codes only: never response text, URLs, headers or credentials."""
@@ -25,6 +27,8 @@ class WordPressAPI:
         self.wp_url = wp_url.rstrip("/")
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(username, app_password)
+        self.coverage = None
+        self.supported_statuses = None
 
     def request(self, method, endpoint, **kwargs):
         # No blind retry of writes. Companion source/version receipts make manual
@@ -48,6 +52,53 @@ class WordPressAPI:
     def upsert(self, payload):
         return self.request("POST", "ms-news/v1/article", json=payload)
 
+    def discover_statuses(self):
+        if self.supported_statuses is None:
+            schema = self.request('OPTIONS', 'wp/v2/posts')
+            choices = []
+            for endpoint in schema.get('endpoints', []):
+                if 'GET' in endpoint.get('methods', []):
+                    choices = endpoint.get('args', {}).get('status', {}).get('items', {}).get('enum', [])
+                    if choices:
+                        break
+            statuses = sorted(set(choices) - {'any'})
+            if not {'publish', 'future', 'draft', 'pending', 'private'} <= set(statuses):
+                raise ValueError('Cannot establish all supported WordPress post statuses')
+            self.supported_statuses = statuses
+        return self.supported_statuses
+
+    def posts(self, **query):
+        # Query each supported status explicitly; status=any can omit states.
+        for status in self.discover_statuses():
+            for page in range(1, 51):
+                batch = self.request('GET', 'wp/v2/posts', params={
+                    'context': 'edit', 'status': status, 'per_page': 100, 'page': page,
+                    '_fields': 'id,status,date_gmt,modified_gmt,title,content,excerpt,link,slug', **query})
+                if not isinstance(batch, list) or any(not isinstance(p, dict) for p in batch):
+                    raise ValueError('Malformed WordPress reconciliation response')
+                yield from batch
+                if len(batch) < 100:
+                    break
+            else:
+                raise ValueError('WordPress reconciliation exceeds bounded page limit')
+
+    def reconcile(self, target=5, anchor_ids=()):
+        now = datetime.now(timezone.utc)
+        after = (now-timedelta(days=35)).strftime('%Y-%m-%dT%H:%M:%S')
+        posts = list(self.posts(modified_after=after))
+        for post_id in anchor_ids:
+            post = self.request('GET', 'wp/v2/posts/'+str(post_id), params={'context': 'edit'})
+            if post.get('id') != post_id:
+                raise ValueError('Fixed reconciliation anchor is unavailable')
+            posts.append(post)
+        self.coverage = CoverageIndex(posts, self.discover_statuses(), now)
+        return self.coverage.public_receipt(target, anchor_ids)
+
+    def daily_progress(self, target=5):
+        if self.coverage is None:
+            raise ValueError('Reconcile WordPress before daily accounting')
+        return self.coverage.daily(target)
+
     def find_duplicate_headline(self, headline):
         """Check the authoritative site, including after runner cache loss.
 
@@ -57,31 +108,32 @@ class WordPressAPI:
         def normalized_title(value):
             return " ".join(re.findall(r"\w+", html.unescape(value).casefold()))
         normalized = normalized_title(headline)
-        page = 1
-        while page <= 5:
-            posts = self.request("GET", "wp/v2/posts", params={
-                "search": " ".join(normalized.split()[:6]), "per_page": 100,
-                "page": page, "status": "publish", "_fields": "id,title"})
-            for post in posts:
-                if normalized_title(post["title"]["rendered"]) == normalized:
-                    return post["id"]
-            if len(posts) < 100:
-                return None
-            page += 1
-        raise ValueError("Duplicate search exceeds bounded review limit")
+        for post in self.posts(search=" ".join(normalized.split()[:6])):
+            if normalized_title(text_field(post, 'title')) == normalized:
+                return post['id']
+        return None
 
     def find_source_publication(self, source_url):
-        """Recover a member receipt from visible, exact source attribution links."""
-        for page in range(1, 6):
-            posts = self.request('GET','wp/v2/posts',params={'search':source_url,
-                'per_page':100,'page':page,'status':'publish','_fields':'id,content'})
-            for post in posts:
-                soup = BeautifulSoup(post['content']['rendered'],'html.parser')
-                if any(a.get('href') == source_url for a in soup.select('.news-source a')):
-                    return post['id']
-            if len(posts) < 100:
-                return None
-        raise ValueError('Source coverage search exceeds bounded review limit')
+        """All links count, including other producers' briefings and unpublished posts."""
+        if self.coverage and self.coverage.source_match(source_url):
+            return self.coverage.source_match(source_url)
+        identity = source_identity(source_url)
+        for post in self.posts(search=source_url):
+            if identity in linked_sources(post):
+                return post['id']
+        return None
+
+    def event_candidates(self, title):
+        if self.coverage is None:
+            raise ValueError('Reconcile WordPress before event matching')
+        # A current source can repeat a long-planned event first covered months ago.
+        stop = set('the and for from with that this will have into its news mississippi county says said today update new public'.split())
+        terms = [w for w in re.findall(r'[a-z0-9]+', html.unescape(title).lower())
+                 if len(w) > 2 and w not in stop]
+        historic = list(self.posts(search=' '.join(terms[:2]))) if terms else []
+        merged = CoverageIndex(list(self.coverage.posts.values()) + historic,
+                               self.discover_statuses(), self.coverage.now)
+        return merged.event_candidates(title)
 
     def create_or_get_tag(self, tag):
         try:

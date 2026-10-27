@@ -97,7 +97,7 @@ class PublicationBoundaryTests(unittest.TestCase):
         f.cfg.max_posts_per_run = 1
         thin = [replace(f.entry, link=f'https://example.org/brief-{i}', content='Thank you for coming.') for i in range(20)]
         with patch('main.fetch_feeds_with_raw', return_value=[(e,{}) for e in thin+[f.entry]]), \
-             patch('main.get_source_image', return_value=Mock()) as image, \
+             patch('main.get_source_image', return_value=test_workflow.NewsImage('test.jpg','Credit','https://example.org/image.jpg')) as image, \
              patch('main.rewrite_article', return_value=f.article) as rewrite:
             stats = run_feed_processing(f.cfg, client=Mock(), wp=f.wp)
         self.assertEqual(stats['skipped'], 20)
@@ -132,6 +132,7 @@ class PublicationBoundaryTests(unittest.TestCase):
 class DuplicateLookupTests(unittest.TestCase):
     def test_exact_normalized_title_and_pagination(self):
         wp = WordPressAPI('https://example.org','test','test')
+        wp.supported_statuses = ['publish']
         wp.request = Mock(side_effect=[
             [{'id':i,'title':{'rendered':'Other story'}} for i in range(100)],
             [{'id':123,'title':{'rendered':'School &amp; library: expansion'}}]])
@@ -140,5 +141,6 @@ class DuplicateLookupTests(unittest.TestCase):
 
     def test_similar_title_is_not_blocked(self):
         wp = WordPressAPI('https://example.org','test','test')
+        wp.supported_statuses = ['publish']
         wp.request = Mock(return_value=[{'id':123,'title':{'rendered':'Library expansion approved'}}])
         self.assertIsNone(wp.find_duplicate_headline('Library expansion delayed'))

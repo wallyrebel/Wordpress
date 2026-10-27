@@ -1,6 +1,8 @@
 # RSS to WordPress: checked automatic publication
 
-This workflow uses **GPT-5 Nano** to extract source-backed facts, **GPT-5.6 Luna** to write the article, and **GPT-5 Nano** to check the draft against the original source.
+See [the approved October 27 restoration contract](docs/publisher-repair-2026-10-27.md) for the five-post Chicago-day goal, all-status cross-producer reconciliation, restricted-content holds and authenticated preview/live deployment gate. This contract supersedes earlier permissive sensitive-topic wording.
+
+This workflow uses **GPT-6 Luna** to extract source-backed facts, **GPT-6 Luna** to write the article, and **GPT-6 Luna** to check the draft against the original source.
 
 Configured feeds remain approved sources under the publisher's existing reuse arrangements. Approval supplies attribution; it never bypasses completeness, source quality or Mississippi relevance.
 
@@ -15,7 +17,7 @@ It publishes automatically only when every requirement passes:
 - Evidence quotations that actually occur in the source. Extra wrapping quotation marks are removed only when the enclosed excerpt matches the source.
 - Story text is summarized; any direct quotations retain exact source wording and attribution. Altered quotations are blocked. The writer and verifier receive the same source URL and publisher.
 - A headline, excerpt and body that pass structure, numeric and factual checks.
-- No unresolved factual issues. Sensitive subjects receive a stronger verification pass and can publish when they pass. Source corrections are held locally.
+- No unresolved factual issues. Allegations, criminal cases and private sensitive information require separate editorial approval and remain held. Other sensitive public-service coverage receives stronger verification. Source corrections are held locally.
 - Full articles require a decoded, usable featured image at least 600 pixels wide and 400 pixels high; 1,200-pixel sources are preferred when supplied. Verified briefs and roundups may omit a photo. Any supplied image must pass the same checks and is never enlarged to pass validation.
 - An existing WordPress category and at least one supported entity tag.
 - Successful upload of any selected image and server-side validation.
@@ -42,8 +44,8 @@ See `.env.example`. Defaults:
 
 | Setting | Default |
 |---|---|
-| EXTRACTION_MODEL | gpt-5-nano |
-| DRAFTING_MODEL | gpt-5.6-luna |
+| EXTRACTION_MODEL | gpt-6-luna |
+| DRAFTING_MODEL | gpt-6-luna |
 | PUBLISH_MODE | auto |
 | MAX_POSTS_PER_RUN | 8 |
 | MAX_RUN_SECONDS | 600 |
@@ -51,7 +53,7 @@ See `.env.example`. Defaults:
 | MAX_AGE_HOURS | 24 |
 | POLL_INTERVAL_MINUTES | 120 |
 
-Nano uses low reasoning for extraction and ordinary verification, and medium for sensitive-subject verification; Luna uses none. Responses have explicit output-token caps, strict Pydantic Structured Outputs, a 90-second client timeout and at most two SDK retries. There is no silent fallback to another drafting model. Each accepted article records actual token usage in its evidence packet. Reasoning tokens count toward output usage.
+GPT-6 Luna uses low reasoning for extraction and ordinary verification, medium for sensitive public-service verification, and none for drafting. Responses have explicit output-token caps, strict Pydantic Structured Outputs, a 90-second client timeout and at most two SDK retries. There is no silent fallback to another drafting model. Each accepted article records actual token usage in its evidence packet. Reasoning tokens count toward output usage.
 
 `feeds.txt` stays primary, supports comments and UTF-8 BOM, and preserves the original feed order. `RSS_FEEDS` is used only if the file is absent. `FEEDS_FILE` and `SOURCES_FILE` can override paths. The misleading RSS_FEEDS secret was removed from the Actions workflow.
 

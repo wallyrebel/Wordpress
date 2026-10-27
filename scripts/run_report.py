@@ -26,6 +26,14 @@ def render_report(stats, items):
          if stats.get('feed_health') == 'degraded' else 'Source read results are listed below.'), '',
         '### Feed coverage', '', '| Source | Read | Eligible | Published / included | Previewed / included | Already processed | Held / retry | Deferred | Old / undated / invalid |',
         '|---|---|---:|---:|---:|---:|---:|---:|---:|']
+    daily = stats.get('daily_after') or stats.get('daily_before')
+    if daily:
+        lines[2:2] = [f"America/Chicago day **{cell(daily['date'])}**: **{daily['published']} / {daily['target']}** distinct live posts; "
+                      f"remaining goal: **{daily['remaining']}**. Briefing sections count as one post, not separate articles.", '',
+                      cell(stats.get('shortfall_action', 'Preview only: source, event, editorial and image review are required before live mode.')), '',
+                      f"Mode: **{cell(stats.get('publication_mode', 'unknown'))}**. Supported post statuses and fixed anchors are recorded in reconciliation-before/after.json.", '']
+    if stats.get('fatal_error'):
+        lines[2:2] = ['**Stopped before publication:** '+cell(json.dumps(stats['fatal_error'], sort_keys=True)), '']
     for url, feed in stats.get('feeds', {}).items():
         outcomes = feed.get('outcomes', {})
         holds = sum(count for status, count in outcomes.items()
@@ -57,6 +65,8 @@ def main():
         items_path = folder / 'run-items.json'
         items = json.loads(items_path.read_text(encoding='utf-8')) if items_path.exists() else []
         report = render_report(stats, items)
+        if stats.get('daily_shortfall'):
+            print('::warning::Chicago daily publication goal remains unmet. Inspect the exact daily count, holds and deferred items; never publish filler.')
         if stats.get('attention_required') or stats.get('feeds_failed'):
             # Never interpolate untrusted feed text into workflow commands.
             print('::warning::RSS items or feeds need attention. See the publishing report for reasons and retries.')

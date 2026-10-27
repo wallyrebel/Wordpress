@@ -276,12 +276,13 @@ class BalancedCoverageTests(unittest.TestCase):
         with self.assertRaisesRegex(ModelOutputError,'Wrong date'):
             rewrite_roundup(sources,roundup_client(p,d,v),'nano','writer')
 
-    def test_source_recovery_uses_exact_attribution_not_incidental_link(self):
+    def test_source_recovery_includes_other_producers_unclassified_links(self):
         wp = WordPressAPI('https://example.org','test','test')
+        wp.supported_statuses = ['publish']
         wp.request = Mock(return_value=[
             {'id':1,'content':{'rendered':'<a href="https://example.org/source">Related</a>'}},
             {'id':2,'content':{'rendered':'<p class="news-source"><a href="https://example.org/source">Source</a></p>'}}])
-        self.assertEqual(wp.find_source_publication('https://example.org/source'),2)
+        self.assertEqual(wp.find_source_publication('https://example.org/source'),1)
         self.assertIsNone(wp.find_source_publication('https://example.org/different'))
 
     def test_alerts_are_processed_before_routine_articles(self):
@@ -293,7 +294,7 @@ class BalancedCoverageTests(unittest.TestCase):
         alert = replace(f.entry,link='https://example.org/alert',content='Road closure. '+fixtures.SOURCE)
         f.article.evidence['extraction']['public_service'] = True
         with patch('main.fetch_feeds_with_raw',return_value=[(f.entry,{}),(alert,{})]), \
-             patch('main.get_source_image',return_value=Mock()), \
+             patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/image.jpg')), \
              patch('main.rewrite_article',return_value=f.article) as rewrite:
             stats = run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
         self.assertEqual(rewrite.call_args.args[2],alert.link)
@@ -321,7 +322,7 @@ class BalancedCoverageTests(unittest.TestCase):
         stats = {'created':0,'errors':0,'duplicates':0,'model_attempts':0,'model_attempt_budget':1,'reasons':{}}
         store = Mock()
         import time
-        with patch('main.rewrite_roundup',return_value=article), patch('main.get_source_image',return_value=Mock()):
+        with patch('main.rewrite_roundup',return_value=article), patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/image.jpg')):
             run_roundup(f.cfg,candidates,stats,time.monotonic(),False,Mock(),f.wp,store,Mock())
         self.assertEqual(stats['created'],1)
         self.assertEqual(f.wp.upsert.call_count,4)

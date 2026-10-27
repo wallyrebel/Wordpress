@@ -162,6 +162,7 @@ class ExpandedSourceTests(unittest.TestCase):
 
     def test_more_than_ten_stories_publish_and_remaining_work_is_reported(self):
         self.cfg.max_posts_per_run = 30
+        self.cfg.max_new_posts_per_run = 30
         entries = [(replace(self.entry, link=f'https://example.org/story-{i}',
                     feed_url=f'https://example.org/feed-{i}'), {}) for i in range(35)]
         with patch('main.fetch_feeds_with_raw', return_value=entries), \

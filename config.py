@@ -31,8 +31,8 @@ class Config:
     poll_interval_minutes: int = 120
     image_dir: str = "./images"
     database_path: str = "./processed.db"
-    extraction_model: str = "gpt-5-nano"
-    drafting_model: str = "gpt-5.6-luna"
+    extraction_model: str = "gpt-6-luna"
+    drafting_model: str = "gpt-6-luna"
     publish_mode: str = "auto"
     max_posts_per_run: int = 8
     max_run_seconds: int = 600
@@ -41,6 +41,9 @@ class Config:
     review_dir: str = "./review"
     sources: dict[str, SourcePolicy] = field(default_factory=dict)
     category_ids: dict[str, int] = field(default_factory=dict)
+    daily_article_goal: int = 5
+    max_new_posts_per_run: int = 2
+    reconciliation_anchor_ids: tuple[int, ...] = (33889, 33891)
 
     def policy(self, feed):
         return self.sources.get(feed, SourcePolicy())
@@ -92,10 +95,12 @@ def load_config(require_wp=True):
         os.getenv("WP_APP_PASSWORD", ""), feeds,
         poll_interval_minutes=positive("POLL_INTERVAL_MINUTES", 120),
         image_dir=os.getenv("IMAGE_DIR", "./images"), database_path=os.getenv("DATABASE_PATH", "./processed.db"),
-        extraction_model=os.getenv("EXTRACTION_MODEL", "gpt-5-nano"),
-        drafting_model=os.getenv("DRAFTING_MODEL", "gpt-5.6-luna"), publish_mode=mode,
+        extraction_model=os.getenv("EXTRACTION_MODEL", "gpt-6-luna"),
+        drafting_model=os.getenv("DRAFTING_MODEL", "gpt-6-luna"), publish_mode=mode,
         max_posts_per_run=positive("MAX_POSTS_PER_RUN", 8),
         max_run_seconds=positive("MAX_RUN_SECONDS", 600),
         max_entries_per_feed=positive("MAX_ENTRIES_PER_FEED", 3),
         max_age_hours=positive("MAX_AGE_HOURS", 24), sources=sources, category_ids=categories,
-        review_dir=os.getenv("REVIEW_DIR", "./review"))
+        review_dir=os.getenv("REVIEW_DIR", "./review"),
+        daily_article_goal=positive('DAILY_ARTICLE_GOAL', 5),
+        max_new_posts_per_run=positive('MAX_NEW_POSTS_PER_RUN', 2))

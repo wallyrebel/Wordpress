@@ -78,7 +78,7 @@ class RewriterTests(unittest.TestCase):
         self.assertFalse(result.requires_review)
         calls = client.responses.parse.call_args_list
         self.assertEqual([c.kwargs["model"] for c in calls],
-                         ["gpt-5-nano", "gpt-5.6-luna", "gpt-5-nano"])
+                         ["gpt-6-luna", "gpt-6-luna", "gpt-6-luna"])
         self.assertEqual([c.kwargs["reasoning"]["effort"] for c in calls], ["low", "none", "low"])
         self.assertTrue(all(c.kwargs["store"] is False for c in calls))
         self.assertTrue(result.body.startswith("<p>"))
@@ -270,6 +270,13 @@ class PublishingTests(unittest.TestCase):
         self.wp = Mock()
         self.wp.receipt.return_value = {}
         self.wp.find_duplicate_headline.return_value = None
+        self.wp.find_source_publication.return_value = None
+        self.wp.event_candidates.return_value = []
+        self.wp.reconcile.return_value = {'daily': {'date': '2026-10-27', 'timezone': 'America/Chicago',
+            'target': 5, 'published': 0, 'remaining': 5, 'post_ids': []}}
+        verification = patch('publication_verification.verify_article', return_value={'verified': True})
+        verification.start()
+        self.addCleanup(verification.stop)
         self.wp.taxonomy.return_value = ([1],[2])
         self.wp.upload_media.return_value = 3
         self.wp.upsert.return_value = {"post_id":4,"status":"publish"}
