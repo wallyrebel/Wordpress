@@ -272,6 +272,9 @@ class PublishingTests(unittest.TestCase):
         self.wp.find_duplicate_headline.return_value = None
         self.wp.find_source_publication.return_value = None
         self.wp.event_candidates.return_value = []
+        self.wp.media_statuses.return_value = ['inherit','private','trash']
+        self.wp.media_identity.return_value = None
+        self.wp.preview_media.return_value = {'writes':0,'existing_media_id':None}
         self.wp.reconcile.return_value = {'daily': {'date': '2026-10-27', 'timezone': 'America/Chicago',
             'target': 5, 'published': 0, 'remaining': 5, 'post_ids': []}}
         verification = patch('publication_verification.verify_article', return_value={'verified': True})

@@ -24,7 +24,7 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.lock
       - run: python -m unittest discover -s tests -v
-      - name: Authenticated reconciliation and at most three editorial pipelines; no writes
+      - name: Authenticated reconciliation and at most eight editorial pipelines; no writes
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           WP_URL: ${{ secrets.WP_URL }}
@@ -34,7 +34,7 @@ jobs:
           DRAFTING_MODEL: gpt-6-luna
           DAILY_ARTICLE_GOAL: '5'
           CATEGORY_IDS_JSON: ${{ vars.CATEGORY_IDS_JSON || '{}' }}
-        run: python main.py --authenticated-preview --max-items 3
+        run: python main.py --authenticated-preview --max-items 8
       - name: Report exact result and any blocker
         if: always()
         run: python scripts/run_report.py

@@ -221,6 +221,15 @@ def check_source_length(content, max_source_chars=24000):
 def editorial_format(content):
     """Cheap routing only. Evidence extraction and verification decide eligibility."""
     text = clean_text(content)
+    # The existing brief policy permits concrete free public events. Route only
+    # dated short candidates here; the same four-fact/where/when/public-service
+    # extraction and independent verification still decide actual eligibility.
+    if (45 <= word_count(text) < MIN_SOURCE_WORDS
+            and re.search(r'\b(free|open to the public)\b', text, re.I)
+            and re.search(r'\b(event|festival|movie|trunk.or.treat|workshop|book sale)\b', text, re.I)
+            and re.search(r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember|t)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{1,2}/\d{1,2}\b', text, re.I)
+            and re.search(r'\b(location|center|library|park|hall|auditorium|street|drive|road)\b', text, re.I)):
+        return 'brief'
     if word_count(text) >= 45 and re.search(
             r"\b(arrest\w*|charg(?:e|ed|es)|missing|evacuat\w*|boil.water|"
             r"advisory|warning|closed|closure|detour|deadline|shelter|"

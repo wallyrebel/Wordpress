@@ -33,5 +33,13 @@ class Store:
                 ON CONFLICT(source_key) DO UPDATE SET content_hash=excluded.content_hash,
                 receipt=excluded.receipt""", (source_key, content_hash, json.dumps(receipt)))
 
+    def pending_writes(self):
+        pending = []
+        for key, digest, value in self.conn.execute('SELECT source_key, content_hash, receipt FROM news_receipts'):
+            record = json.loads(value)
+            if record.get('status') == 'write_reconciliation_required':
+                pending.append({'source_key': key, 'content_hash': digest, **record})
+        return pending
+
     def close(self):
         self.conn.close()

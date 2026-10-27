@@ -326,5 +326,6 @@ class BalancedCoverageTests(unittest.TestCase):
             run_roundup(f.cfg,candidates,stats,time.monotonic(),False,Mock(),f.wp,store,Mock())
         self.assertEqual(stats['created'],1)
         self.assertEqual(f.wp.upsert.call_count,4)
-        self.assertEqual(store.save.call_count,3)
+        member_saves=[c for c in store.save.call_args_list if c.args[0] in {source_key(item[0]) for item in candidates}]
+        self.assertEqual(len(member_saves),3)
         self.assertEqual([c.args[0]['adopt_post_id'] for c in f.wp.upsert.call_args_list[1:]],[42,42,42])

@@ -30,7 +30,12 @@ and the job summary. A shortfall is a warning requiring source/hold/throughput r
 permission for filler, fabricated context, duplicated coverage or weakened evidence gates.
 
 The two-hour UTC cadence `17 */2 * * *` and eight-pipeline attempt budget are unchanged.
-New publication is limited to two posts per run to avoid bulk catch-up. Five is a daily goal,
+New publication is limited to two reserved live-write slots per run to avoid bulk catch-up.
+A slot is persisted before taxonomy/media/post mutation and remains consumed if later public
+verification fails. An uncertain write stops subsequent candidates and roundups. Its pending
+source/media/post intent survives in the database; later runs reconcile read-only and remain
+paused until that exact intent is resolved. Verified publication counts are never used as a
+substitute for the live-write attempt budget. Five is a daily goal,
 not a claim that eight model attempts produce eight articles or that every day has enough
 qualifying source material. Additional useful distinct coverage can continue after the goal.
 
@@ -50,6 +55,11 @@ publication merely because verification succeeds. Missing-information placeholde
 published. Useful source-quality holds and all original evidence, freshness and image gates
 remain in place. No new image-reuse permission is inferred.
 
+Complete short, dated free public events are routed to the already-approved service-brief
+contract instead of being trapped in a roundup that needs three items. All original four-fact,
+who/what/where/when, 70-word, usefulness and verification checks still apply; a free-event
+keyword is never itself permission to publish.
+
 ## Preview, activation and verification
 
 The first deployment keeps `PUBLISHER_LIVE: 'false'` in the existing RSS workflow. This makes
@@ -60,9 +70,18 @@ article and image artifacts before switching live mode on.
 
 `rss-repair-preview.yml` is a temporary, read-only validation workflow, not a scheduled writer.
 It uses `contents: read`, shares the publishing concurrency group, and runs on an explicit
-change to its own file or manual dispatch. It runs offline tests before a three-pipeline
+change to its own file or manual dispatch. It runs offline tests before an eight-pipeline
 authenticated preview. It grants no additional GitHub token permissions. Remove it after
 restoration has been validated; the normal publisher's manual default remains preview.
+
+Media has a deterministic SHA-256 filename/slug identity and a pre-write intent receipt.
+Every supported attachment status is queried before upload, including during authenticated
+preflight. Matching assets require exact encoded bytes. Existing completed assets preserve
+their metadata; nonpublic matches and identity/lookup errors fail closed. Interrupted uploads
+and metadata updates retain the identity and known attachment ID. Controlled recovery
+reconciles that same asset rather than uploading again. Existing unidentified orphan assets
+are never deleted, renamed or overwritten. Media receipts are retained alongside the publishing
+database cache. Preview media reconciliation is GET/OPTIONS only and creates no media intent.
 
 After successful offline checks, authenticated reconciliation, source/editorial/image review,
 enable only workflow 220722126 and change its deployment gate to `PUBLISHER_LIVE: 'true'`.

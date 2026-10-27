@@ -1,4 +1,7 @@
 import copy
+import hashlib
+import json
+import tempfile
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -152,6 +155,47 @@ class RepairBoundaryTests(TestCase):
         f.run_flow()
         f.wp.upsert.assert_not_called()
 
+    def test_verification_failure_with_repeated_candidates_consumes_slot_and_stops_run(self):
+        f=self.f; f.cfg.max_entries_per_feed=8
+        entries=[(replace(f.entry,link=f'https://example.org/{i}'),{}) for i in range(5)]
+        with patch('main.fetch_feeds_with_raw',return_value=entries), \
+             patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/a.jpg')), \
+             patch('main.rewrite_article',return_value=f.article), \
+             patch('publication_verification.verify_article',side_effect=TimeoutError()):
+            stats=run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
+        self.assertEqual(stats['created'],0)
+        self.assertEqual(stats['live_publication_slots_reserved'],1)
+        self.assertEqual(stats['live_article_write_attempts'],1)
+        self.assertTrue(stats['write_reconciliation_required'])
+        self.assertEqual(stats['deferred'],4)
+        f.wp.upsert.assert_called_once();f.wp.upload_media.assert_called_once()
+
+    def test_uncertain_create_stops_other_candidates_and_quarantines_next_run(self):
+        f=self.f; f.cfg.max_entries_per_feed=8;f.wp.upsert.side_effect=TimeoutError()
+        entries=[(replace(f.entry,link=f'https://example.org/{i}'),{}) for i in range(5)]
+        with patch('main.fetch_feeds_with_raw',return_value=entries), \
+             patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/a.jpg')), \
+             patch('main.rewrite_article',return_value=f.article):
+            stats=run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
+        self.assertEqual(stats['live_article_write_attempts'],1)
+        self.assertEqual(stats['live_publication_slots_reserved'],1)
+        self.assertTrue(stats['write_reconciliation_required']);f.wp.upsert.assert_called_once()
+        f.wp.upsert.reset_mock(); f.wp.upload_media.reset_mock()
+        with patch('main.fetch_feeds_with_raw') as feeds:
+            again=run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
+        self.assertTrue(again['write_reconciliation_required'])
+        feeds.assert_not_called();f.wp.upsert.assert_not_called();f.wp.upload_media.assert_not_called()
+
+    def test_interrupted_intent_survives_a_changed_source_fingerprint(self):
+        from database import Store
+        from main import source_key
+        f=self.f;store=Store(f.cfg.database_path)
+        store.save(source_key(f.entry),'old-digest',{'status':'write_reconciliation_required',
+            'source_urls':[f.entry.link],'feed_hash':'an-older-source-fingerprint'})
+        store.close()
+        stats=f.run_flow()
+        self.assertTrue(stats['write_reconciliation_required']);f.wp.upsert.assert_not_called()
+
 
 class PlaceholderTests(TestCase):
     def test_missing_information_patterns_are_rejected(self):
@@ -161,6 +205,15 @@ class PlaceholderTests(TestCase):
 
     def test_supported_ordinary_copy_is_accepted(self):
         check_reader_text('Tupelo Library opens its public book sale October 29 at the library.')
+
+    def test_complete_dated_free_event_uses_existing_brief_gates(self):
+        from ai_rewriter import editorial_format
+        text=('The City of Meridian, Mississippi Parks and Recreation Department invites families '
+              'to a free movie event on October 30, 2026. Location: Frank Cochran Center, '
+              '1725 Carousel Drive, Meridian. Trunk or treat starts at 5:30 p.m., and '
+              'the free movie Hocus Pocus begins at 6:30 p.m. Admission is free for families.')
+        self.assertEqual(editorial_format(text),'brief')
+        self.assertEqual(editorial_format(text.replace('October 30, 2026','a date soon')),'roundup')
 
 
 class PublicVerificationTests(TestCase):
@@ -200,3 +253,87 @@ class PublicVerificationTests(TestCase):
     def test_missing_public_source_link_is_detected(self):
         with self.assertRaisesRegex(ValueError,'source link'):
             self.verify(self.page.replace('href="https://agency.gov/a"','href="https://agency.gov/wrong"'))
+
+    def test_appended_single_article_attribution_is_part_of_public_link_verification(self):
+        from publication_verification import verify_article
+        attribution='<p class="news-source">Source: <a href="https://agency.gov/original">Agency</a>.</p>'
+        complete=self.article.body+attribution
+        self.saved['content']['raw']=complete
+        page=self.page.replace('</article>',attribution.replace('https://agency.gov/original','https://agency.gov/wrong')+'</article>')
+        with patch('publication_verification.public_document',return_value=(page.encode(),{})):
+            with self.assertRaisesRegex(ValueError,'source link'):
+                verify_article(self.wp,self.receipt,self.article,complete,0,None)
+
+
+class MediaRecoveryTests(TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.path=Path(self.temp.name)/'image.jpg';self.path.write_bytes(b'fixed source-image fixture bytes')
+        self.digest=hashlib.sha256(self.path.read_bytes()).hexdigest();self.slug='msn-image-'+self.digest
+        self.image=fixtures.NewsImage(str(self.path),'Approved source credit','https://agency.gov/photo.jpg')
+        self.wp=WordPressAPI('https://example.org','test','test',Path(self.temp.name)/'receipts')
+        self.wp.supported_media_statuses=['inherit','private','trash']
+        self.asset={'id':91,'slug':self.slug,'status':'inherit','source_url':'https://example.org/photo.jpg'}
+
+    def ledger(self):
+        return json.loads((self.wp.media_receipt_dir/(self.digest+'.json')).read_text())
+
+    def first_attempt(self,metadata_fails=False):
+        def request(method,endpoint,**kwargs):
+            if method=='GET':return []
+            if endpoint=='wp/v2/media':
+                if not metadata_fails:raise TimeoutError()
+                return self.asset
+            raise TimeoutError()
+        self.wp.request=Mock(side_effect=request)
+        with self.assertRaises(TimeoutError):self.wp.upload_media(self.image,'Reviewed headline')
+
+    def recover_existing(self):
+        def request(method,endpoint,**kwargs):
+            if method=='GET':return [self.asset] if kwargs['params']['status']=='inherit' else []
+            self.assertEqual(endpoint,'wp/v2/media/91')
+            return self.asset
+        self.wp.request=Mock(side_effect=request)
+        with patch('safe_http.fetch_bytes',return_value=(self.path.read_bytes(),'image/jpeg',self.asset['source_url'])):
+            self.assertEqual(self.wp.upload_media(self.image,'Reviewed headline'),91)
+        self.assertFalse(any(c.args==('POST','wp/v2/media') for c in self.wp.request.call_args_list))
+
+    def test_upload_timeout_reconciles_same_identity_without_another_upload(self):
+        self.first_attempt()
+        self.assertEqual(self.ledger()['state'],'upload_uncertain')
+        self.recover_existing()
+        self.assertEqual(self.ledger()['media_id'],91)
+        self.assertEqual(self.ledger()['state'],'verified')
+
+    def test_metadata_timeout_preserves_known_media_id_and_does_not_upload_again(self):
+        self.first_attempt(metadata_fails=True)
+        self.assertEqual(self.ledger()['state'],'metadata_uncertain')
+        self.assertEqual(self.ledger()['media_id'],91)
+        self.recover_existing()
+
+    def test_media_lookup_failure_prevents_all_posts(self):
+        self.wp.request=Mock(side_effect=TimeoutError())
+        with self.assertRaises(TimeoutError):self.wp.upload_media(self.image,'Reviewed headline')
+        self.assertTrue(all(c.args[0]=='GET' for c in self.wp.request.call_args_list))
+
+    def test_existing_matching_asset_preserves_edited_metadata(self):
+        self.recover_existing()
+        self.assertTrue(all(c.args[0]=='GET' for c in self.wp.request.call_args_list))
+        self.assertTrue(self.ledger()['metadata_preserved'])
+
+    def test_nonpublic_media_is_not_reused_restored_or_duplicated(self):
+        self.asset['status']='private'
+        self.wp.request=Mock(return_value=[self.asset])
+        with self.assertRaisesRegex(ValueError,'nonpublic'):
+            self.wp.upload_media(self.image,'Reviewed headline')
+        self.assertTrue(all(c.args[0]=='GET' for c in self.wp.request.call_args_list))
+        self.assertEqual(self.ledger()['state'],'existing_nonpublic')
+
+    def test_media_preview_performs_only_gets_and_creates_no_intent_or_asset(self):
+        self.wp.request=Mock(return_value=[])
+        result=self.wp.preview_media(self.image)
+        self.assertEqual(result['writes'],0)
+        self.assertEqual(result['slug'],self.slug)
+        self.assertEqual(result['all_supported_statuses_checked'],['inherit','private','trash'])
+        self.assertTrue(all(c.args[0]=='GET' for c in self.wp.request.call_args_list))
+        self.assertFalse(self.wp.media_receipt_dir.exists())

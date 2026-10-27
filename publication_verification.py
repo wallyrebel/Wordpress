@@ -68,13 +68,16 @@ def verify_article(wp, receipt, article, expected_content, media_id, image):
     robots += ' ' + ' '.join(v for k, v in headers.items() if k.lower() == 'x-robots-tag')
     if 'noindex' in robots.lower():
         raise ValueError('Public article is marked noindex')
-    visible = plain(str(soup))
-    expected = BeautifulSoup(article.body, 'html.parser')
+    public_article = soup.find('article')
+    if public_article is None:
+        raise ValueError('Public article container missing')
+    visible = plain(str(public_article))
+    expected = BeautifulSoup(expected_content, 'html.parser')
     for node in expected.find_all(['p', 'h2']):
-        if plain(node.get_text()) not in visible:
+        if plain(str(node)) not in visible:
             raise ValueError('Public article text or section missing')
     for node in expected.find_all('a', href=True):
-        if not soup.find('a', href=node['href']):
+        if not public_article.find('a', href=node['href']):
             raise ValueError('Public source link missing')
     if media_id:
         media = wp.request('GET', 'wp/v2/media/'+str(media_id))

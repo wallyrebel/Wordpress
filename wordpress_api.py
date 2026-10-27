@@ -1,6 +1,8 @@
 """Authenticated client for the durable MS News Workflow companion."""
 import html
 import re
+import hashlib
+import json
 from pathlib import Path
 from bs4 import BeautifulSoup
 import requests
@@ -23,12 +25,14 @@ def safe_http_details(exc):
     return details
 
 class WordPressAPI:
-    def __init__(self, wp_url, username, app_password):
+    def __init__(self, wp_url, username, app_password, media_receipt_dir='review/media'):
         self.wp_url = wp_url.rstrip("/")
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(username, app_password)
         self.coverage = None
         self.supported_statuses = None
+        self.media_receipt_dir = Path(media_receipt_dir)
+        self.supported_media_statuses = None
 
     def request(self, method, endpoint, **kwargs):
         # No blind retry of writes. Companion source/version receipts make manual
@@ -183,11 +187,128 @@ class WordPressAPI:
                 tag_ids.append(self.create_or_get_tag(tag))
         return ([category_id] if category_id else []), list(dict.fromkeys(tag_ids))
 
+    def media_statuses(self):
+        if self.supported_media_statuses is None:
+            schema = self.request('OPTIONS', 'wp/v2/media')
+            choices = []
+            for endpoint in schema.get('endpoints', []):
+                if 'GET' in endpoint.get('methods', []):
+                    choices = endpoint.get('args', {}).get('status', {}).get('items', {}).get('enum', [])
+                    if choices:
+                        break
+            statuses = sorted(set(choices)-{'any'})
+            if 'inherit' not in statuses:
+                raise ValueError('Cannot establish supported WordPress media statuses')
+            self.supported_media_statuses = statuses
+        return self.supported_media_statuses
+
+    def media_identity(self, slug):
+        found = {}
+        for status in self.media_statuses():
+            for page in range(1, 6):
+                batch = self.request('GET', 'wp/v2/media', params={'context': 'edit',
+                    'status': status, 'slug': slug, 'per_page': 100, 'page': page})
+                if not isinstance(batch, list):
+                    raise ValueError('Malformed media identity lookup')
+                for media in batch:
+                    if media.get('slug') != slug or type(media.get('id')) is not int:
+                        raise ValueError('Media identity lookup did not match exact slug')
+                    found[media['id']] = media
+                if len(batch) < 100:
+                    break
+            else:
+                raise ValueError('Media identity lookup exceeds bounded limit')
+        if len(found) > 1:
+            raise ValueError('Multiple assets share the deterministic media identity; review required')
+        return next(iter(found.values()), None)
+
+    def save_media_receipt(self, record):
+        self.last_media_receipt = dict(record)
+        self.media_receipt_dir.mkdir(parents=True, exist_ok=True)
+        path = self.media_receipt_dir / (record['sha256']+'.json')
+        temp = path.with_suffix('.tmp')
+        temp.write_text(json.dumps(record, indent=2), encoding='utf-8')
+        temp.replace(path)
+
+    def preview_media(self, image):
+        """Read-only identity/pixel check; never upload or change metadata."""
+        from safe_http import fetch_bytes
+        digest = hashlib.sha256(Path(image.path).read_bytes()).hexdigest()
+        slug = 'msn-image-'+digest
+        media = self.media_identity(slug)
+        if media:
+            if media.get('status') not in ('inherit', 'publish'):
+                raise ValueError('Preview media identity exists in a nonpublic status')
+            served, _, _ = fetch_bytes(media['source_url'], max_bytes=10_000_000)
+            if hashlib.sha256(served).hexdigest() != digest:
+                raise ValueError('Preview media identity bytes differ')
+        return {'sha256': digest, 'slug': slug, 'existing_media_id': media['id'] if media else None,
+                'all_supported_statuses_checked': self.media_statuses(), 'writes': 0}
+
     def upload_media(self, image, headline):
-        with Path(image.path).open("rb") as stream:
-            media = self.request("POST", "wp/v2/media",
-                files={"file": (Path(image.path).name, stream, "image/jpeg")})
-        self.request("POST", "wp/v2/media/" + str(media["id"]),
-            json={"alt_text": "", "caption": html.escape(image.credit),
-                  "description": "Source image: " + html.escape(image.source_url)})
-        return media["id"]
+        """One deterministic identity; reconcile before creating, never retry uncertain POST."""
+        from safe_http import fetch_bytes
+        data = Path(image.path).read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        slug = 'msn-image-'+digest
+        previous_path = self.media_receipt_dir/(digest+'.json')
+        previous = json.loads(previous_path.read_text()) if previous_path.exists() else {}
+        if previous and (previous.get('sha256') != digest or previous.get('slug') != slug):
+            raise ValueError('Saved media intent identity mismatch')
+        record = {'sha256': digest, 'slug': slug, 'state': 'lookup', 'media_id': None}
+        self.save_media_receipt(record)
+        media = self.media_identity(slug)
+        if media:
+            if media.get('status') not in ('inherit', 'publish'):
+                record.update(state='existing_nonpublic', media_id=media['id'], observed_status=media.get('status'))
+                self.save_media_receipt(record)
+                raise ValueError('Deterministic media is nonpublic; do not restore, expose or recreate automatically')
+            served, _, _ = fetch_bytes(media['source_url'], max_bytes=10_000_000)
+            if hashlib.sha256(served).hexdigest() != digest:
+                record.update(state='existing_bytes_mismatch', media_id=media['id'])
+                self.save_media_receipt(record)
+                raise ValueError('Existing deterministic media bytes differ; no overwrite or upload')
+            record.update(state='existing_verified', media_id=media['id'])
+            self.save_media_receipt(record)
+            resume_metadata = (previous.get('state') in ('upload_intent', 'upload_uncertain', 'uploaded',
+                               'metadata_intent', 'metadata_uncertain')
+                               and previous.get('media_id') in (None, media['id']))
+            if not resume_metadata:
+                # Matching bytes do not authorize overwriting an editor's existing metadata.
+                record.update(state='verified', metadata_preserved=True)
+                self.save_media_receipt(record)
+                return media['id']
+        else:
+            record['state'] = 'upload_intent'
+            self.save_media_receipt(record)
+            try:
+                with Path(image.path).open('rb') as stream:
+                    media = self.request('POST', 'wp/v2/media',
+                        data={'slug': slug, 'title': slug},
+                        files={'file': (slug+'.jpg', stream, 'image/jpeg')})
+                if type(media.get('id')) is int:
+                    record['media_id'] = media['id']
+                if type(media.get('id')) is not int or media.get('slug') != slug:
+                    raise ValueError('Uploaded media identity was not confirmed')
+                record.update(state='uploaded', media_id=media['id'])
+                self.save_media_receipt(record)
+            except Exception:
+                record['state'] = 'upload_uncertain'
+                self.save_media_receipt(record)
+                raise
+        try:
+            record['state'] = 'metadata_intent'
+            self.save_media_receipt(record)
+            result = self.request('POST', 'wp/v2/media/'+str(media['id']),
+                json={'slug': slug, 'title': headline, 'alt_text': headline,
+                      'caption': html.escape(image.credit),
+                      'description': 'Source image: '+html.escape(image.source_url)})
+            if result.get('id') != media['id'] or result.get('slug') != slug:
+                raise ValueError('Media metadata identity was not confirmed')
+            record['state'] = 'verified'
+            self.save_media_receipt(record)
+            return media['id']
+        except Exception:
+            record['state'] = 'metadata_uncertain'
+            self.save_media_receipt(record)
+            raise

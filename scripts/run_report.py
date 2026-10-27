@@ -34,6 +34,10 @@ def render_report(stats, items):
                       f"Mode: **{cell(stats.get('publication_mode', 'unknown'))}**. Supported post statuses and fixed anchors are recorded in reconciliation-before/after.json.", '']
     if stats.get('fatal_error'):
         lines[2:2] = ['**Stopped before publication:** '+cell(json.dumps(stats['fatal_error'], sort_keys=True)), '']
+    lines[2:2] = [f"Reserved live publication slots: **{stats.get('live_publication_slots_reserved', 0)}** · "
+                  f"New-article POST attempts: **{stats.get('live_article_write_attempts', 0)}** · "
+                  f"Write reconciliation required: **{bool(stats.get('write_reconciliation_required'))}**. "
+                  'A write remains budgeted even when later public verification fails.', '']
     for url, feed in stats.get('feeds', {}).items():
         outcomes = feed.get('outcomes', {})
         holds = sum(count for status, count in outcomes.items()

@@ -62,6 +62,21 @@ def publication_status(article, policy, config, category_ids):
         return "publish"
     return "hold"
 
+
+def reserve_publication(config, stats, store, key, digest, source_urls, feed_hash=''):
+    """Persist intent before mutation; verification success is not a write budget."""
+    if stats.get('write_reconciliation_required'):
+        raise InsufficientSource('Live writes paused until the previous intent is reconciled')
+    slots = stats.get('live_publication_slots_reserved', 0)
+    if slots >= config.max_new_posts_per_run:
+        raise InsufficientSource('Controlled live-write budget reached; continue next scheduled run')
+    stats['live_publication_slots_reserved'] = slots + 1
+    intent = {'status': 'write_reconciliation_required', 'source_urls': source_urls,
+              'source_url': source_urls[0], 'feed_hash': feed_hash,
+              'reason': 'Publication intent reserved; reconcile exact source/media/post identities after interruption'}
+    store.save(key, digest, intent)
+    return intent
+
 def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None, authenticated_preview=False):
     started = time.monotonic()
     stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0,
@@ -71,9 +86,13 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
     stats['publication_mode'] = 'authenticated-preview' if authenticated_preview else 'offline-preview' if dry_run else 'live'
     stats['daily_goal'] = config.daily_article_goal
     stats['max_new_posts_per_run'] = config.max_new_posts_per_run
+    stats['live_publication_slots_reserved'] = 0
+    stats['live_article_write_attempts'] = 0
     store = Store(config.database_path) if not dry_run else None
     client = client or OpenAI(api_key=config.openai_api_key, timeout=90, max_retries=2)
-    wp = wp or (None if dry_run and not authenticated_preview else WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password))
+    wp = wp or (None if dry_run and not authenticated_preview else WordPressAPI(
+        config.wp_url, config.wp_username, config.wp_app_password,
+        media_receipt_dir=Path(config.review_dir)/'media'))
     outcomes = []
     setup_stage = 'WordPress health check'
     def observe(entry, status, reason="", cached=False):
@@ -95,6 +114,25 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
             stats['reconciliation'] = wp.reconcile(config.daily_article_goal, config.reconciliation_anchor_ids)
             stats['daily_before'] = stats['reconciliation']['daily']
             write_json(Path(config.review_dir) / 'reconciliation-before.json', stats['reconciliation'])
+            setup_stage = 'authenticated all-status media identity preflight'
+            stats['supported_media_statuses'] = wp.media_statuses()
+            wp.media_identity('msn-image-'+'0'*64)  # permission/lookup probe only; no asset creation
+            pending = store.pending_writes() if store else []
+            if pending:
+                setup_stage = 'pending source/media/post outcome reconciliation'
+                stats['write_reconciliation_required'] = True
+                stats['errors'] += 1
+                for item in pending:
+                    server = wp.receipt(item['source_key'])
+                    item['observed_receipt_post_id'] = server.get('post_id')
+                    item['observed_source_post_ids'] = [wp.find_source_publication(url)
+                                                       for url in item['source_urls']]
+                    if item.get('media_identity'):
+                        found = wp.media_identity(item['media_identity']['slug'])
+                        item['observed_media_id'] = found['id'] if found else None
+                        item['observed_media_status'] = found.get('status') if found else None
+                write_json(Path(config.review_dir) / 'pending-write-reconciliation.json', pending)
+                return stats
         setup_stage = 'configured source feed read'
         entries = fetch_feeds_with_raw(config.rss_feeds, config.max_entries_per_feed,
                                        config.max_age_hours, stats)
@@ -108,6 +146,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
         feed_attempts = {}
         roundup_candidates = []
         for entry, raw in entries:
+            if stats.get('write_reconciliation_required'):
+                stats['deferred'] = stats.get('deferred', 0) + 1
+                observe(entry, 'deferred', 'Live writes paused: reconcile the previous source/media/post intent first')
+                continue
             key = source_key(entry)
             if key in seen:
                 observe(entry, "duplicate", "Repeated source URL in this run")
@@ -125,6 +167,13 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
             correction_feedback = ""
             stage = "publication receipt and cache"
             receipt = None
+            if wp:
+                wp.last_media_receipt = None
+            mutation_started = False
+            record = {}
+            image = None
+            media_id = 0
+            digest = original_hash
             try:
                 cached = store.get(key) if store else None
                 if cached and cached.get("feed_hash") == original_hash:
@@ -150,6 +199,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     stage = "legacy source enrichment"
                     entry = enrich_entry(entry, policy, raw)
                     digest = fingerprint(entry.title, entry.content)
+                    store.save(key, digest, {'status': 'write_reconciliation_required',
+                        'source_urls': [entry.link], 'source_url': entry.link,
+                        'feed_hash': original_hash, 'adopt_post_id': legacy_id})
+                    mutation_started = True
                     receipt = wp.upsert({"source_key": key, "content_hash": digest,
                         "source_url": entry.link, "adopt_post_id": legacy_id})
                     store.save(key, digest, {**receipt, "feed_hash": original_hash})
@@ -204,7 +257,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     check_source_length(entry.content)
                 if format == "full":
                     check_source_length(entry.content)
-                if not dry_run and stats['created'] >= config.max_new_posts_per_run:
+                if not dry_run and stats['live_publication_slots_reserved'] >= config.max_new_posts_per_run:
                     stats['deferred'] = stats.get('deferred', 0) + 1
                     observe(entry, 'deferred', 'Controlled per-run publication limit reached; continue next scheduled run')
                     continue
@@ -264,6 +317,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
                           "content_hash": digest, "source_text": clean_text(entry.content),
                           "article": asdict(article), 'image': asdict(image) if image else None}
+                if dry_run and wp and image:
+                    record['media_reconciliation'] = wp.preview_media(image)
                 write_json(Path(config.review_dir) / (key + ".json"), record)
                 if dry_run:
                     if wp:
@@ -301,6 +356,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     observe(entry, "duplicate", "Exact headline already published")
                     continue
                 stage = "WordPress category and tags"
+                reserve_publication(config, stats, store, key, digest, [entry.link], original_hash)
+                mutation_started = True
                 category_ids, tag_ids = wp.taxonomy(article.category, article.tags, config.category_ids)
                 status = publication_status(article, policy, config, category_ids)
                 if status != "publish" or not tag_ids:
@@ -321,6 +378,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 source_line = '<p class="news-source">Source: <a href="' + html.escape(
                     entry.link, quote=True) + '">' + html.escape(publisher) + "</a>.</p>"
                 stage = "WordPress article publication"
+                stats['live_article_write_attempts'] += 1
                 receipt = wp.upsert({
                     "source_key": key, "content_hash": digest, "source_url": entry.link,
                     "title": article.headline, "content": article.body + source_line,
@@ -330,7 +388,9 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     "source_published": (entry.published or entry.updated).isoformat(),
                     "evidence": article.evidence})
                 stage = "publication receipt persistence"
-                store.save(key, digest, {**receipt, "feed_hash": original_hash})
+                store.save(key, digest, {**receipt, 'status': 'write_reconciliation_required',
+                    'source_urls': [entry.link], 'source_url': entry.link, 'receipt': receipt,
+                    'media_id': media_id, 'feed_hash': original_hash})
                 record["status"], record["receipt"] = 'published_unverified', receipt
                 write_json(Path(config.review_dir) / (key + ".json"), record)
                 stage = 'independent public verification'
@@ -338,6 +398,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 record['public_verification'] = verify_article(wp, receipt, article, article.body + source_line, media_id, image)
                 record['status'] = 'publish'
                 write_json(Path(config.review_dir) / (key + '.json'), record)
+                store.save(key, digest, {**receipt, 'feed_hash': original_hash})
                 stats["created"] += 1
                 stats[format + '_created'] = stats.get(format + '_created',0)+1
                 observe(entry, "publish")
@@ -375,9 +436,23 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     if details.get("api_error_code"):
                         reason += " (" + details["api_error_code"] + ")"
                 logger.error("Item held; source=%s error=%s", key[:12], reason)
+                if mutation_started:
+                    stats['write_reconciliation_required'] = True
+                    pending = {'status': 'write_reconciliation_required', 'source_urls': [entry.link],
+                               'source_url': entry.link, 'feed_hash': original_hash, 'receipt': receipt,
+                               'media_id': media_id, 'stage': stage, 'reason': reason,
+                               'image': asdict(image) if image else None}
+                    media_receipt = getattr(wp, 'last_media_receipt', None)
+                    if isinstance(media_receipt, dict):
+                        pending['media_identity'] = media_receipt
+                        record['media_identity'] = media_receipt
+                    store.save(key, digest, pending)
+                record.update(status='error', source_url=entry.link, stage=stage,
+                              error_type=type(exc).__name__, receipt=receipt, media_id=media_id,
+                              source_key=key, content_hash=digest, reconcile_before_retry=mutation_started,
+                              **details)
                 write_json(Path(config.review_dir) / (key + ".json"),
-                    {"status": "error", "source_url": entry.link, "stage": stage, "error_type": type(exc).__name__,
-                     'receipt': receipt, **details})
+                           record)
                 observe(entry, "error", reason)
         if roundup_candidates:
             run_roundup(config, roundup_candidates, stats, started, dry_run, client, wp, store, observe)
@@ -399,6 +474,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 stats['daily_shortfall'] = reconciled['daily']['remaining']
                 stats['shortfall_action'] = ('Continue on the unchanged next two-hour schedule; inspect holds, source freshness and deferred items. Never bypass evidence or add filler.'
                                             if stats['daily_shortfall'] else 'Daily goal met; further publication still requires distinct useful verified material.')
+                if stats.get('write_reconciliation_required'):
+                    stats['shortfall_action'] = 'Live writes paused. Reconcile the saved source/media/post intent and public outcome before clearing the exact pending cache record; never recreate blindly.'
             except Exception as exc:
                 stats['errors'] += 1
                 stats['daily_accounting_error'] = type(exc).__name__
@@ -417,13 +494,18 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
     key = None
     reported = set()
     receipt = None
+    mutation_started = False
+    record = {}
+    digest = ''
     def report(entry,status,reason):
         reported.add(source_key(entry))
         observe(entry,status,reason)
     try:
         if stats['model_attempts'] >= stats['model_attempt_budget'] or time.monotonic()-started >= config.max_run_seconds:
             raise InsufficientSource('Roundup deferred until next run: processing budget reached')
-        if not dry_run and stats['created'] >= config.max_new_posts_per_run:
+        if stats.get('write_reconciliation_required'):
+            raise InsufficientSource('Roundup paused until the previous write is reconciled')
+        if not dry_run and stats.get('live_publication_slots_reserved', 0) >= config.max_new_posts_per_run:
             raise InsufficientSource('Roundup deferred: controlled per-run publication limit reached')
         # Prefer enough factual material; cap each feed's contribution for source diversity.
         groups = {}
@@ -476,6 +558,8 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
         image = next((found for _,raw,policy,_,_ in included
                       if (found := get_source_image(raw,policy,config.image_dir))),None)
         record['image'] = asdict(image) if image else None
+        if dry_run and wp and image:
+            record['media_reconciliation'] = wp.preview_media(image)
         write_json(Path(config.review_dir)/(key+'.json'),record)
         if dry_run:
             if wp and wp.find_duplicate_headline(article.headline):
@@ -491,19 +575,25 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
             raise InsufficientSource('Briefing source/event already covered; preserve existing posts')
         if wp.find_duplicate_headline(article.headline):
             raise InsufficientSource('A briefing for this section and compilation date is already published')
+        digest = fingerprint(article.headline,json.dumps(article.evidence['sources'],sort_keys=True))
+        reserve_publication(config, stats, store, key, digest, [item[0].link for item in included])
+        mutation_started = True
+        wp.last_media_receipt = None
         category_ids, tag_ids = wp.taxonomy(article.category,article.tags,config.category_ids)
         if not category_ids or not tag_ids:
             raise InsufficientSource('Roundup category or supported tags missing')
         media_id = wp.upload_media(image,article.headline) if image else 0
         if image and not media_id:
             raise ValueError('Roundup featured image upload failed')
-        digest = fingerprint(article.headline,json.dumps(article.evidence['sources'],sort_keys=True))
+        stats['live_article_write_attempts'] = stats.get('live_article_write_attempts', 0) + 1
         receipt = wp.upsert({'source_key':key,'content_hash':digest,'source_url':included[0][0].link,
             'title':article.headline,'content':article.body,'excerpt':article.excerpt,'status':'publish',
             'categories':category_ids,'tags':tag_ids,'featured_media':media_id,'review_reasons':[],
             'source_published':(included[0][0].published or included[0][0].updated).isoformat(),
             'evidence':article.evidence})
         record.update(status='published_unverified', receipt=receipt)
+        store.save(key, digest, {'status': 'write_reconciliation_required',
+            'source_urls': [item[0].link for item in included], 'receipt': receipt, 'media_id': media_id})
         write_json(Path(config.review_dir)/(key+'.json'),record)
         from publication_verification import verify_article
         record['public_verification'] = verify_article(wp, receipt, article, article.body, media_id, image)
@@ -516,7 +606,11 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
                 'source_url':entry.link,'adopt_post_id':receipt['post_id']})
             store.save(source_key(entry),member_digest,{**adopted,'feed_hash':original_hash})
             report(entry,'publish','Included in multi-source briefing')
+        store.save(key, digest, receipt)
     except (InsufficientSource,ModelOutputError) as exc:
+        if mutation_started:
+            stats['write_reconciliation_required'] = True
+            stats['errors'] += 1
         stats['roundup_holds'] = stats.get('roundup_holds',0)+1
         stats['reasons'][str(exc)] = stats['reasons'].get(str(exc),0)+1
         for entry,*_ in selected or candidates:
@@ -527,9 +621,20 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
     except Exception as exc:
         stats['errors'] += 1
         logger.error('Roundup held: %s',type(exc).__name__)
+        if mutation_started:
+            stats['write_reconciliation_required'] = True
+            pending = {'status': 'write_reconciliation_required',
+                'source_urls': [item[0].link for item in included], 'receipt': receipt,
+                'reason': 'Roundup mutation/verification failed; reconcile exact identities before retry'}
+            media_receipt = getattr(wp, 'last_media_receipt', None)
+            if isinstance(media_receipt, dict):
+                pending['media_identity'] = media_receipt
+                record['media_identity'] = media_receipt
+            store.save(key, digest, pending)
         if key:
-            write_json(Path(config.review_dir)/(key+'.json'), {'status': 'error', 'receipt': receipt,
-                       'error_type': type(exc).__name__, 'reconcile_before_retry': True})
+            record.update(status='error', receipt=receipt, error_type=type(exc).__name__,
+                          reconcile_before_retry=mutation_started, source_key=key, content_hash=digest)
+            write_json(Path(config.review_dir)/(key+'.json'), record)
         for entry,*_ in selected or candidates:
             report(entry,'error','Roundup pipeline: '+type(exc).__name__)
     finally:
