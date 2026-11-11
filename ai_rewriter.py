@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v16-official-crime-reports"
+PROMPT_VERSION = "evidence-v17-official-crime-reports"
 # Editorial floors for automatic publication, not Google ranking requirements.
 # A body floor above what a source can honestly support only produces rejections:
 # the 300-word minimum could not be met from a 180-word source without padding.
@@ -422,6 +422,13 @@ def numeric_tokens(value):
     # One telephone number, however the source punctuates it: (662)-895-4111,
     # (662) 895-4111 and 662.895.4111 are the same digits as 662-895-4111.
     value = re.sub(r"\(?\b(\d{3})\)?[\s.-]{1,2}(\d{3})[\s.-](\d{4})\b", r"\1-\2-\3", value)
+    # A day range shares its month: "Nov. 13-16" and "Nov. 13 through 16" name the
+    # same two dates as "Nov. 13 ... Nov. 16". Clock times after "to" are left alone.
+    value = re.sub(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
+                   r"Aug(?:ust)?|Sep(?:tember|t)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(\.?\s+)"
+                   r"(0?[1-9]|[12]\d|3[01])\s*(?:-|–|—|\bto\b|\bthrough\b|\band\b)\s*"
+                   r"(0?[1-9]|[12]\d|3[01])\b(?!\s*(?:[:/]|[ap]\.?m))",
+                   r"\1\2\3 to \1\2\4", value, flags=re.I)
     months = {name: i for i, name in enumerate(
         ('jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'), 1)}
     value = re.sub(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
