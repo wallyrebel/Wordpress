@@ -35,7 +35,7 @@ class EditorialQualityTests(unittest.TestCase):
 
     def test_fact_and_length_floors_match_what_a_short_source_can_support(self):
         import ai_rewriter
-        self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 120, 3))
+        self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 100, 3))
         # A body floor above the source floor can only be met by padding.
         self.assertLess(ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_SOURCE_WORDS)
         self.assertLessEqual(ai_rewriter.MIN_BRIEF_WORDS, ai_rewriter.MIN_BRIEF_SOURCE_WORDS)

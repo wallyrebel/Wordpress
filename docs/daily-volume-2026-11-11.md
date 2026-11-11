@@ -27,9 +27,13 @@ should publish.
 
 - The workflow is live and runs hourly: up to five new posts and sixteen model attempts
   per run. There is no daily ceiling.
-- Sources of 60–179 words are judged on their own as news briefs (60–250 body words,
+- Sources of 60–179 words are judged on their own as news briefs (40–250 body words,
   three facts) instead of waiting for three compatible items to form a briefing.
-- Full articles need 120+ body words, three paragraphs and five facts.
+- Full articles need 100+ body words, three paragraphs and five facts.
+- A fact whose quotation is not found in the source is dropped instead of discarding
+  the whole item; the remaining facts must still pass every check.
+- The verifier lists only material problems. Style notes no longer fail an accurate draft.
+- Telephone numbers are compared by digits, so `(662)-895-4111` matches `662-895-4111`.
 - Who and what are required. Where, when and why are reported when the source supplies
   them; a source that omits one no longer disqualifies the story.
 - An interrupted write is settled from WordPress's own receipt and source-link records

@@ -12,16 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v12-daily-volume"
+PROMPT_VERSION = "evidence-v13-daily-volume"
 # Editorial floors for automatic publication, not Google ranking requirements.
 # A body floor above what a source can honestly support only produces rejections:
 # the 300-word minimum could not be met from a 180-word source without padding.
 MIN_SOURCE_WORDS = 180          # routed as a full article
 MIN_BRIEF_SOURCE_WORDS = 60     # shorter posts can only join a multi-source briefing
-MIN_ARTICLE_WORDS = 120
+MIN_ARTICLE_WORDS = 100
 MIN_FACTS = 5
 MIN_PARAGRAPHS = 3
-MIN_BRIEF_WORDS = 60
+MIN_BRIEF_WORDS = 40
+MIN_EVIDENCE_CHARS = 8
 MIN_BRIEF_FACTS = 3
 # Who and what are indispensable. Where, when and why are reported whenever the
 # source supplies them, but agency posts often omit one and are still useful.
@@ -201,7 +202,12 @@ really answer their assigned questions; labels alone do not prove completeness.
 Reject stale events presented as current, unresolved relative dates (today,
 tonight, next week) that confuse readers, or a feed date used as an event date.
 Do not demand an event date invented for a timeless topic: hold incomplete
-notices for an editor instead. List concrete issues on any failure. Do not rewrite."""
+notices for an editor instead. Do not rewrite.
+List in issues ONLY material failures: a claim the source does not support; a changed
+name, number, date, place or attribution; a misleading statement; or a missing central
+fact. Style preferences, mild repetition, an accurate but compressed excerpt, and wording
+a reasonable reader would understand correctly are NOT failures and must not be listed.
+When supported and quality_passed are both true, issues MUST be an empty list."""
 
 def clean_text(value):
     if "<" not in (value or ""):
@@ -368,6 +374,9 @@ def numeric_tokens(value):
     value = re.sub(r"\b(\d+)(?:st|nd|rd|th)\b", r"\1", value, flags=re.I)
     # Preserve month/day identity across numeric and named US calendar dates.
     # Do not merely allow each component: that would hide changed months/days.
+    # One telephone number, however the source punctuates it: (662)-895-4111,
+    # (662) 895-4111 and 662.895.4111 are the same digits as 662-895-4111.
+    value = re.sub(r"\(?\b(\d{3})\)?[\s.-]{1,2}(\d{3})[\s.-](\d{4})\b", r"\1-\2-\3", value)
     months = {name: i for i, name in enumerate(
         ('jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'), 1)}
     value = re.sub(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
@@ -450,13 +459,23 @@ def rewrite_article(title, content, link, openai_client, *,
     facts = {fact.id: fact for fact in extraction.facts}
     if len(facts) != len(extraction.facts):
         raise ModelOutputError("Duplicate fact IDs")
-    for fact in facts.values():
-        if not fact.id.strip() or not fact.statement.strip() or len(fact.evidence.strip()) < 12:
-            raise ModelOutputError("Empty or inadequate evidence")
-        exact_evidence = source_evidence(fact.evidence, source)
-        if exact_evidence is None or len(exact_evidence) < 12:
-            raise ModelOutputError("Evidence quotation absent from source")
-        fact.evidence = exact_evidence
+    # A fact whose quotation is not in the source is dropped, never repaired. One bad
+    # quotation used to discard the whole item; now the writer simply never sees it,
+    # and the remaining facts must still satisfy every completeness check.
+    supported = []
+    for fact in extraction.facts:
+        exact_evidence = source_evidence(fact.evidence, source) if fact.statement.strip() else None
+        if exact_evidence is not None and len(exact_evidence) >= MIN_EVIDENCE_CHARS:
+            fact.evidence = exact_evidence
+            supported.append(fact)
+    if not supported:
+        raise ModelOutputError("Evidence quotation absent from source")
+    if len(supported) != len(extraction.facts):
+        extraction.facts = supported
+        facts = {fact.id: fact for fact in supported}
+        for question in ("who", "what", "where", "when", "why"):
+            setattr(extraction.five_ws, question,
+                    [ref for ref in getattr(extraction.five_ws, question) if ref in facts])
     check_completeness(extraction, format)
     draft_prompt = DRAFT_PROMPT + time_guidance
     verify_prompt = VERIFY_PROMPT + time_guidance
