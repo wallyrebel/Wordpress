@@ -33,6 +33,36 @@ class EditorialQualityTests(unittest.TestCase):
                 validate_publication_article(rewrite_article('Story', SOURCE, 'https://example.org', client))
                 self.assertEqual(client.responses.parse.call_count, 3)
 
+    def test_approved_agency_notice_does_not_need_a_named_who_in_its_own_text(self):
+        from ai_rewriter import validate_publication_article
+        extraction = packet()
+        extraction.five_ws.who = []
+        with self.assertRaisesRegex(InsufficientSource, 'who'):
+            rewrite_article('Notice', SOURCE, 'https://example.org', fake_client(extraction=extraction))
+        extraction = packet()
+        extraction.five_ws.who = []
+        client = fake_client(extraction=extraction)
+        article = rewrite_article('Notice', SOURCE, 'https://example.org', client,
+            publisher='Mississippi Department of Transportation on Facebook', approved_primary_source=True)
+        self.assertTrue(article.evidence['publisher_supplies_who'])
+        self.assertIn('Name that publisher', client.responses.parse.call_args_list[1].kwargs['input'][0]['content'])
+        validate_publication_article(article)
+        # The record alone cannot waive the check for an unapproved source.
+        article.evidence['publisher_supplies_who'] = False
+        with self.assertRaisesRegex(InsufficientSource, 'who'):
+            validate_publication_article(article)
+
+    def test_long_excerpt_is_cut_to_whole_sentences_before_verification(self):
+        from ai_rewriter import shorten_excerpt
+        first = 'Tupelo Library plans a public book sale on September 12 at 10 a.m. in Tupelo.'
+        text = first + ' ' + 'Proceeds support the community reading program and the replacement of worn materials in the collection.'
+        self.assertGreater(len(text), 160)
+        self.assertEqual(shorten_excerpt(text), first)
+        self.assertEqual(shorten_excerpt(first), first)
+        cut = shorten_excerpt('word ' * 60)
+        self.assertLessEqual(len(cut), 160)
+        self.assertTrue(cut.endswith('word\u2026'))
+
     def test_fact_and_length_floors_match_what_a_short_source_can_support(self):
         import ai_rewriter
         self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 100, 3))

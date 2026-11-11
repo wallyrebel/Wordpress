@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v13-daily-volume"
+PROMPT_VERSION = "evidence-v14-daily-volume"
 # Editorial floors for automatic publication, not Google ranking requirements.
 # A body floor above what a source can honestly support only produces rejections:
 # the 300-word minimum could not be met from a 180-word source without padding.
@@ -268,7 +268,22 @@ def editorial_format(content):
     return "brief" if word_count(text) >= MIN_BRIEF_SOURCE_WORDS else "roundup"
 
 
-def check_completeness(extraction, format="full"):
+def shorten_excerpt(text, limit=160):
+    """Keep whole sentences that fit; the shortened text is what gets verified."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    kept = ""
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        if len((kept + " " + sentence).strip()) > limit:
+            break
+        kept = (kept + " " + sentence).strip()
+    if kept:
+        return kept
+    return text[:limit - 1].rsplit(" ", 1)[0].rstrip(",;:-") + "\u2026"
+
+
+def check_completeness(extraction, format="full", publisher_supplies_who=False):
     if not extraction.mississippi_relevant:
         raise InsufficientSource("Source does not establish Mississippi relevance")
     if not extraction.substantive or not extraction.reader_value.strip():
@@ -282,6 +297,10 @@ def check_completeness(extraction, format="full"):
     required = REQUIRED_QUESTIONS if format in ("full", "brief") else ROUNDUP_QUESTIONS
     for question, refs in extraction.five_ws.model_dump().items():
         if not refs and question in required:
+            # An approved agency writing in the first person ("our offices will be
+            # closed") is itself the who; the configured publisher supplies the name.
+            if question == "who" and publisher_supplies_who:
+                continue
             raise InsufficientSource("Missing source-backed " + question)
         if not set(refs) <= facts.keys():
             raise ModelOutputError("Unknown five-W supporting fact IDs for " + question
@@ -325,7 +344,7 @@ def validate_publication_article(article):
         verification = Verification.model_validate(evidence.get("verification"))
     except ValidationError as exc:
         raise ModelOutputError("Incomplete editorial evidence") from exc
-    check_completeness(extraction, format)
+    check_completeness(extraction, format, bool(evidence.get("publisher_supplies_who")))
     if extraction.restricted_content or extraction.category == 'Crime & Courts':
         raise InsufficientSource('Allegation or private-sensitive source requires separate editorial approval')
     check_body_quality(draft.paragraphs, extraction.five_ws, format)
@@ -476,7 +495,8 @@ def rewrite_article(title, content, link, openai_client, *,
         for question in ("who", "what", "where", "when", "why"):
             setattr(extraction.five_ws, question,
                     [ref for ref in getattr(extraction.five_ws, question) if ref in facts])
-    check_completeness(extraction, format)
+    publisher_supplies_who = bool(approved_primary_source and publisher.strip())
+    check_completeness(extraction, format, publisher_supplies_who)
     draft_prompt = DRAFT_PROMPT + time_guidance
     verify_prompt = VERIFY_PROMPT + time_guidance
     if format == "brief":
@@ -489,6 +509,10 @@ def rewrite_article(title, content, link, openai_client, *,
         verify_prompt += ("\nThis is a short news brief of 60-250 words. An unknown or unreported reason does "
             "not disqualify a useful update. Require concrete details of the development. Do not demand "
             "padding or a longer article. Reject stale alerts, advertisements, and posts with no concrete news.")
+    if publisher_supplies_who and not extraction.five_ws.who:
+        draft_prompt += ("\nThis is a first-person notice from the supplied publisher. Name that publisher, "
+            "without any 'on Facebook' suffix, as the organization announcing or carrying out the "
+            "development. Add nothing else about it.")
     if correction_feedback:
         draft_prompt += "\nA previous attempt failed validation. Address the supplied previous_validation_error using ONLY the original evidence. Omit unsupported details; never invent facts to satisfy a check. All original rules still apply."
         if correction_feedback.startswith("Direct quotation differs"):
@@ -504,7 +528,7 @@ def rewrite_article(title, content, link, openai_client, *,
     def reader_text(value):
         return normalize_quote_stops(" ".join(re.sub(reference_pattern, "", value).split()), source)
     draft.headline = reader_text(draft.headline)
-    draft.excerpt = reader_text(draft.excerpt)
+    draft.excerpt = shorten_excerpt(reader_text(draft.excerpt))
     for paragraph in draft.paragraphs:
         paragraph.text = reader_text(paragraph.text)
     if not 1 <= len(draft.headline.strip()) <= 100 or not 1 <= len(draft.excerpt.strip()) <= 160:
@@ -555,4 +579,5 @@ def rewrite_article(title, content, link, openai_client, *,
         tags, draft.excerpt, bool(reasons), reasons,
         {"prompt_version": PROMPT_VERSION, "format": format, "extraction": extraction.model_dump(),
          "draft": draft.model_dump(), "verification": verification.model_dump(), "usage": usage,
+         "publisher_supplies_who": publisher_supplies_who,
          "source_words": word_count(source), "body_words": word_count(body)})
