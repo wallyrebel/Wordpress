@@ -1,5 +1,7 @@
 # Balanced coverage policy
 
+> Superseded in part on November 11, 2026: the length, fact-count and five-W floors below were lowered. See [daily-volume-2026-11-11.md](daily-volume-2026-11-11.md) for the current values.
+
 The October 2 rollout was revised after the publisher requested a balance between
 depth and coverage. A single 300-word minimum is no longer applied to every story.
 

@@ -2,7 +2,7 @@ name: RSS to WordPress Automation
 
 on:
   schedule:
-    - cron: '17 */2 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -20,10 +20,11 @@ concurrency:
 jobs:
   publish-articles:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
-      # Read-only until the first authenticated preview is reviewed.
-      PUBLISHER_LIVE: 'false'
+      # 'true' publishes on every scheduled run. Set 'false' to make every run a
+      # read-only preview. Manual runs stay previews unless dry_run is unticked.
+      PUBLISHER_LIVE: 'true'
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
@@ -52,12 +53,12 @@ jobs:
           PUBLISH_MODE: auto
           EXTRACTION_MODEL: gpt-6-luna
           DRAFTING_MODEL: gpt-6-luna
-          DAILY_ARTICLE_GOAL: '5'
-          MAX_NEW_POSTS_PER_RUN: '2'
+          DAILY_ARTICLE_GOAL: ${{ vars.DAILY_ARTICLE_GOAL || '10' }}
+          MAX_NEW_POSTS_PER_RUN: ${{ vars.MAX_NEW_POSTS_PER_RUN || '5' }}
           CATEGORY_IDS_JSON: ${{ vars.CATEGORY_IDS_JSON || '{}' }}
-          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '8' }}
+          MAX_POSTS_PER_RUN: ${{ vars.MAX_POSTS_PER_RUN || '16' }}
           MAX_ENTRIES_PER_FEED: ${{ vars.MAX_ENTRIES_PER_FEED || '3' }}
-          MAX_RUN_SECONDS: ${{ vars.MAX_RUN_SECONDS || '600' }}
+          MAX_RUN_SECONDS: ${{ vars.MAX_RUN_SECONDS || '1200' }}
           DRY_RUN: ${{ inputs.dry_run || false }}
         shell: bash
         run: |

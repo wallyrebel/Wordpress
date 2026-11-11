@@ -12,12 +12,22 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v11-reviewed-daily-goal"
+PROMPT_VERSION = "evidence-v14-daily-volume"
 # Editorial floors for automatic publication, not Google ranking requirements.
-MIN_SOURCE_WORDS = 180
-MIN_ARTICLE_WORDS = 300
-MIN_FACTS = 7
-MIN_PARAGRAPHS = 4
+# A body floor above what a source can honestly support only produces rejections:
+# the 300-word minimum could not be met from a 180-word source without padding.
+MIN_SOURCE_WORDS = 180          # routed as a full article
+MIN_BRIEF_SOURCE_WORDS = 60     # shorter posts can only join a multi-source briefing
+MIN_ARTICLE_WORDS = 100
+MIN_FACTS = 5
+MIN_PARAGRAPHS = 3
+MIN_BRIEF_WORDS = 40
+MIN_EVIDENCE_CHARS = 8
+MIN_BRIEF_FACTS = 3
+# Who and what are indispensable. Where, when and why are reported whenever the
+# source supplies them, but agency posts often omit one and are still useful.
+REQUIRED_QUESTIONS = ("who", "what")
+ROUNDUP_QUESTIONS = ("who", "what", "where", "when")
 FactId = Annotated[str, Field(pattern=r'^f[1-9][0-9]*$',
     description='An ID from this extraction facts list, such as f1. Never a name or prose.')]
 
@@ -136,15 +146,15 @@ Omit missing details entirely. Never publish missing-information placeholders su
 not provided, not specified, unknown date/location, TBD or TBA. Never fill gaps to meet a quota.
 No added background, speculation, invented quotes, generic praise, implications,
 statistics, filler or promises of future updates.
-Write 300-500 BODY words only when the source contains enough distinct, useful
-facts. Develop substantial announcements and detailed reports into full articles
+Write 150-500 BODY words, as long as the distinct, useful facts support.
+Develop substantial announcements and detailed reports into full articles
 rather than compressing them into one or two paragraphs. Cover the material
 who, what, when, where and why, key results, and relevant next steps or context ONLY
 when supplied by the source. Organize those details in a logical reading order.
-Sparse sources must be skipped, not expanded. Never repeat facts, stretch
-quotations or invent background to reach 300 words. If the evidence cannot
+Use every distinct supplied fact before stopping. Never repeat facts, stretch
+quotations or invent background to reach 150 words. If the evidence cannot
 support the length, return only supported prose; the validator will reject it.
-Use 4-8 useful paragraphs and cover every supplied five_ws answer in the body.
+Use 3-8 useful paragraphs and cover every supplied five_ws answer in the body.
 Do not add statements about information being unavailable or not
 released (such as 'no additional details') unless the source explicitly says so.
 Lead with the main development; retain attribution and allegation qualifiers.
@@ -176,12 +186,14 @@ misleading omissions and exaggerated headlines. Direct quotations are permitted
 when copied exactly from the source and clearly attributed. The rest should be
 summarized, not substantially copied.
 A fact-id reference alone is NOT evidence. supported=true only if ALL claims are
-supported. Also reject if the reader cannot identify the central event, its
-participants or relevant location/time from the draft.
+supported. Also reject if the reader cannot identify the central event or its
+participants from the draft, or its location/time when the source supplies them.
 For a sports story, readers must be able to identify the sport from the headline
 or opening sentence when it is supplied by the source.
-Set quality_passed=true ONLY if the body meaningfully answers who, what, where, when and why using the
-source, adds useful detail without padding, and establishes Mississippi relevance.
+Set quality_passed=true ONLY if the body meaningfully answers who and what, plus where, when
+and why whenever the source supplies them, adds useful detail without padding, and
+establishes Mississippi relevance. A source that omits a date, place or reason is
+not a quality failure when the draft reports everything the source does supply.
 Why may be the source-stated purpose or public impact, never an invented motive.
 An unknown cause alone does not answer why the story matters. Reject repetitive
 paraphrases, generic background, promotional praise, mixed-language artifacts,
@@ -190,7 +202,12 @@ really answer their assigned questions; labels alone do not prove completeness.
 Reject stale events presented as current, unresolved relative dates (today,
 tonight, next week) that confuse readers, or a feed date used as an event date.
 Do not demand an event date invented for a timeless topic: hold incomplete
-notices for an editor instead. List concrete issues on any failure. Do not rewrite."""
+notices for an editor instead. Do not rewrite.
+List in issues ONLY material failures: a claim the source does not support; a changed
+name, number, date, place or attribution; a misleading statement; or a missing central
+fact. Style preferences, mild repetition, an accurate but compressed excerpt, and wording
+a reasonable reader would understand correctly are NOT failures and must not be listed.
+When supported and quality_passed are both true, issues MUST be an empty list."""
 
 def clean_text(value):
     if "<" not in (value or ""):
@@ -218,8 +235,8 @@ def check_source_length(content, max_source_chars=24000):
         raise InsufficientSource("Source exceeds limit; review rather than truncate")
     return source
 
-def editorial_format(content):
-    """Cheap routing only. Evidence extraction and verification decide eligibility."""
+def service_notice(content):
+    """Keyword-routed alerts, closures, deadlines and dated free events."""
     text = clean_text(content)
     # The existing brief policy permits concrete free public events. Route only
     # dated short candidates here; the same four-fact/where/when/public-service
@@ -229,18 +246,44 @@ def editorial_format(content):
             and re.search(r'\b(event|festival|movie|trunk.or.treat|workshop|book sale)\b', text, re.I)
             and re.search(r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember|t)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{1,2}/\d{1,2}\b', text, re.I)
             and re.search(r'\b(location|center|library|park|hall|auditorium|street|drive|road)\b', text, re.I)):
-        return 'brief'
-    if word_count(text) >= 45 and re.search(
+        return True
+    return bool(word_count(text) >= 45 and re.search(
             r"\b(arrest\w*|charg(?:e|ed|es)|missing|evacuat\w*|boil.water|"
             r"advisory|warning|closed|closure|detour|deadline|shelter|"
             r"public meeting|register by|registration opens|food distribution|"
             r"free clinic|outage|road work|paving|water.{0,20}restored|"
-            r"postponed|cancell?ed|rescheduled|shooting|homicide)\b", text, re.I):
+            r"postponed|cancell?ed|rescheduled|shooting|homicide)\b", text, re.I))
+
+
+def editorial_format(content):
+    """Cheap routing only. Evidence extraction and verification decide eligibility."""
+    text = clean_text(content)
+    if service_notice(text):
         return "brief"
-    return "full" if word_count(text) >= MIN_SOURCE_WORDS else "roundup"
+    if word_count(text) >= MIN_SOURCE_WORDS:
+        return "full"
+    # Most agency and school posts are 60-180 words. Requiring three compatible
+    # items before any of them could publish left nearly every one unused, so a
+    # concrete short post is judged on its own as a news brief.
+    return "brief" if word_count(text) >= MIN_BRIEF_SOURCE_WORDS else "roundup"
 
 
-def check_completeness(extraction, format="full"):
+def shorten_excerpt(text, limit=160):
+    """Keep whole sentences that fit; the shortened text is what gets verified."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    kept = ""
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        if len((kept + " " + sentence).strip()) > limit:
+            break
+        kept = (kept + " " + sentence).strip()
+    if kept:
+        return kept
+    return text[:limit - 1].rsplit(" ", 1)[0].rstrip(",;:-") + "\u2026"
+
+
+def check_completeness(extraction, format="full", publisher_supplies_who=False):
     if not extraction.mississippi_relevant:
         raise InsufficientSource("Source does not establish Mississippi relevance")
     if not extraction.substantive or not extraction.reader_value.strip():
@@ -248,13 +291,16 @@ def check_completeness(extraction, format="full"):
     facts = {f.id: f for f in extraction.facts}
     distinct = {(normalized(f.statement), normalized(f.evidence)) for f in extraction.facts}
     evidence = {normalized(f.evidence) for f in extraction.facts}
-    minimum = MIN_FACTS if format == "full" else 4 if format == "brief" else 3
-    if format == "brief" and not extraction.public_service:
-        raise InsufficientSource("Short standalone story lacks actionable public-service value")
+    minimum = MIN_FACTS if format == "full" else MIN_BRIEF_FACTS
     if min(len(distinct), len(evidence)) < minimum:
         raise InsufficientSource(f"Fewer than {minimum} distinct supported facts")
+    required = REQUIRED_QUESTIONS if format in ("full", "brief") else ROUNDUP_QUESTIONS
     for question, refs in extraction.five_ws.model_dump().items():
-        if not refs and (format == "full" or question != "why"):
+        if not refs and question in required:
+            # An approved agency writing in the first person ("our offices will be
+            # closed") is itself the who; the configured publisher supplies the name.
+            if question == "who" and publisher_supplies_who:
+                continue
             raise InsufficientSource("Missing source-backed " + question)
         if not set(refs) <= facts.keys():
             raise ModelOutputError("Unknown five-W supporting fact IDs for " + question
@@ -263,14 +309,14 @@ def check_completeness(extraction, format="full"):
 
 def check_body_quality(paragraphs, five_ws, format="full"):
     body = " ".join(p.text for p in paragraphs)
-    minimum = MIN_ARTICLE_WORDS if format == "full" else 70 if format == "brief" else 30
+    minimum = MIN_ARTICLE_WORDS if format == "full" else MIN_BRIEF_WORDS if format == "brief" else 30
     paragraphs_min = MIN_PARAGRAPHS if format == "full" else 2 if format == "brief" else 1
     if word_count(body) < minimum:
         raise InsufficientSource(f"Fewer than {minimum} body words; no padding allowed")
     if len(paragraphs) < paragraphs_min:
         raise InsufficientSource(f"Fewer than {paragraphs_min} substantive paragraphs")
     if format == 'brief' and (word_count(body) > 250 or len(paragraphs) > 5):
-        raise ModelOutputError('Public-service brief exceeds 250 words or five paragraphs')
+        raise ModelOutputError('News brief exceeds 250 words or five paragraphs')
     used = {ref for p in paragraphs for ref in p.fact_ids}
     for question, refs in five_ws.model_dump().items():
         if refs and not used.intersection(refs):
@@ -298,7 +344,7 @@ def validate_publication_article(article):
         verification = Verification.model_validate(evidence.get("verification"))
     except ValidationError as exc:
         raise ModelOutputError("Incomplete editorial evidence") from exc
-    check_completeness(extraction, format)
+    check_completeness(extraction, format, bool(evidence.get("publisher_supplies_who")))
     if extraction.restricted_content or extraction.category == 'Crime & Courts':
         raise InsufficientSource('Allegation or private-sensitive source requires separate editorial approval')
     check_body_quality(draft.paragraphs, extraction.five_ws, format)
@@ -347,6 +393,9 @@ def numeric_tokens(value):
     value = re.sub(r"\b(\d+)(?:st|nd|rd|th)\b", r"\1", value, flags=re.I)
     # Preserve month/day identity across numeric and named US calendar dates.
     # Do not merely allow each component: that would hide changed months/days.
+    # One telephone number, however the source punctuates it: (662)-895-4111,
+    # (662) 895-4111 and 662.895.4111 are the same digits as 662-895-4111.
+    value = re.sub(r"\(?\b(\d{3})\)?[\s.-]{1,2}(\d{3})[\s.-](\d{4})\b", r"\1-\2-\3", value)
     months = {name: i for i, name in enumerate(
         ('jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'), 1)}
     value = re.sub(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
@@ -408,8 +457,13 @@ def rewrite_article(title, content, link, openai_client, *,
         'never infer that an unresolved case is closed merely because its incident date is old.')
     extract_prompt = EXTRACT_PROMPT + time_guidance
     if format == 'brief':
-        extract_prompt = extract_prompt.replace('useful full article', 'useful public-service brief of 70-250 words')
-        extract_prompt += '\nAssess substantive for this BRIEF format: four distinct actionable facts can be enough. A dated free community event with location and participation details is useful service information, not merely an advertisement. Keep when/where explicit; never invent missing facts.'
+        extract_prompt = extract_prompt.replace('useful full article', 'useful news brief of 60-250 words')
+        extract_prompt += ('\nAssess substantive for this BRIEF format: three distinct concrete facts can be enough. '
+            'A specific announcement, result, award, appointment, program, grant, closure, alert or dated event '
+            'with named participants is useful local news even when short. A dated free community event with '
+            'location and participation details is useful service information, not merely an advertisement. '
+            'Greetings, thank-you notes, vague teasers, memes, prayers and posts with no concrete development '
+            'remain substantive=false. Keep when/where explicit when supplied; never invent missing facts.')
     extraction = _call(openai_client, extraction_model, "low", Extraction,
         extract_prompt, {"title": title, "source_text": source, "source_url": link,
         "publisher": publisher, "source_date": source_date, "current_time": current_time,
@@ -424,22 +478,41 @@ def rewrite_article(title, content, link, openai_client, *,
     facts = {fact.id: fact for fact in extraction.facts}
     if len(facts) != len(extraction.facts):
         raise ModelOutputError("Duplicate fact IDs")
-    for fact in facts.values():
-        if not fact.id.strip() or not fact.statement.strip() or len(fact.evidence.strip()) < 12:
-            raise ModelOutputError("Empty or inadequate evidence")
-        exact_evidence = source_evidence(fact.evidence, source)
-        if exact_evidence is None or len(exact_evidence) < 12:
-            raise ModelOutputError("Evidence quotation absent from source")
-        fact.evidence = exact_evidence
-    check_completeness(extraction, format)
+    # A fact whose quotation is not in the source is dropped, never repaired. One bad
+    # quotation used to discard the whole item; now the writer simply never sees it,
+    # and the remaining facts must still satisfy every completeness check.
+    supported = []
+    for fact in extraction.facts:
+        exact_evidence = source_evidence(fact.evidence, source) if fact.statement.strip() else None
+        if exact_evidence is not None and len(exact_evidence) >= MIN_EVIDENCE_CHARS:
+            fact.evidence = exact_evidence
+            supported.append(fact)
+    if not supported:
+        raise ModelOutputError("Evidence quotation absent from source")
+    if len(supported) != len(extraction.facts):
+        extraction.facts = supported
+        facts = {fact.id: fact for fact in supported}
+        for question in ("who", "what", "where", "when", "why"):
+            setattr(extraction.five_ws, question,
+                    [ref for ref in getattr(extraction.five_ws, question) if ref in facts])
+    publisher_supplies_who = bool(approved_primary_source and publisher.strip())
+    check_completeness(extraction, format, publisher_supplies_who)
     draft_prompt = DRAFT_PROMPT + time_guidance
     verify_prompt = VERIFY_PROMPT + time_guidance
     if format == "brief":
-        draft_prompt = draft_prompt.replace("Write 300-500 BODY words", "Write 70-250 BODY words").replace(
-            "reach 300 words", "reach 70 words").replace("Use 4-8 useful paragraphs", "Use 2-5 useful paragraphs")
-        draft_prompt += "\nThis is an actionable public-service brief. Report the concrete alert, service details or crime development concisely. Cover who, what, where and when. Explain the stated purpose or public impact if supplied; do not invent a cause or criminal motive. An absent why is permitted for this brief."
-        verify_prompt = verify_prompt.replace("who, what, where, when and why", "who, what, where and when")
-        verify_prompt += "\nFor this public-service brief, an unknown or unreported reason/motive does not disqualify a useful alert or crime update. Require concrete service/safety/case details. Do not demand padding or a 300-word length. Reject stale alerts or a routine promotional item misclassified as public service."
+        draft_prompt = draft_prompt.replace("Write 150-500 BODY words", "Write 60-250 BODY words").replace(
+            "reach 150 words", "reach 60 words").replace("Use 3-8 useful paragraphs", "Use 2-5 useful paragraphs")
+        draft_prompt += ("\nThis is a short news brief. Report the concrete development concisely: an alert, "
+            "service change, event, announcement, result or recognition. Cover who and what, plus where and "
+            "when if supplied. Explain the stated purpose or public impact if supplied; do not invent a cause "
+            "or motive. An absent why is permitted for this brief.")
+        verify_prompt += ("\nThis is a short news brief of 60-250 words. An unknown or unreported reason does "
+            "not disqualify a useful update. Require concrete details of the development. Do not demand "
+            "padding or a longer article. Reject stale alerts, advertisements, and posts with no concrete news.")
+    if publisher_supplies_who and not extraction.five_ws.who:
+        draft_prompt += ("\nThis is a first-person notice from the supplied publisher. Name that publisher, "
+            "without any 'on Facebook' suffix, as the organization announcing or carrying out the "
+            "development. Add nothing else about it.")
     if correction_feedback:
         draft_prompt += "\nA previous attempt failed validation. Address the supplied previous_validation_error using ONLY the original evidence. Omit unsupported details; never invent facts to satisfy a check. All original rules still apply."
         if correction_feedback.startswith("Direct quotation differs"):
@@ -455,7 +528,7 @@ def rewrite_article(title, content, link, openai_client, *,
     def reader_text(value):
         return normalize_quote_stops(" ".join(re.sub(reference_pattern, "", value).split()), source)
     draft.headline = reader_text(draft.headline)
-    draft.excerpt = reader_text(draft.excerpt)
+    draft.excerpt = shorten_excerpt(reader_text(draft.excerpt))
     for paragraph in draft.paragraphs:
         paragraph.text = reader_text(paragraph.text)
     if not 1 <= len(draft.headline.strip()) <= 100 or not 1 <= len(draft.excerpt.strip()) <= 160:
@@ -506,4 +579,5 @@ def rewrite_article(title, content, link, openai_client, *,
         tags, draft.excerpt, bool(reasons), reasons,
         {"prompt_version": PROMPT_VERSION, "format": format, "extraction": extraction.model_dump(),
          "draft": draft.model_dump(), "verification": verification.model_dump(), "usage": usage,
+         "publisher_supplies_who": publisher_supplies_who,
          "source_words": word_count(source), "body_words": word_count(body)})

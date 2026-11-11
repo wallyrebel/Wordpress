@@ -68,7 +68,8 @@ class RewriterTests(unittest.TestCase):
     def test_approved_feed_still_cannot_invent_facts(self):
         extraction = packet()
         extraction.facts[0].evidence = "The library received a million dollar donation"
-        with self.assertRaises(ModelOutputError):
+        # The invented fact is dropped; the story it alone supported cannot proceed.
+        with self.assertRaisesRegex(InsufficientSource, "who"):
             rewrite_article("Sale", SOURCE, "https://example.org", fake_client(extraction),
                             approved_primary_source=True)
 
@@ -93,9 +94,27 @@ class RewriterTests(unittest.TestCase):
         extraction = packet()
         extraction.facts[0].evidence = "The library announced a million dollar donation"
         client = fake_client(extraction)
-        with self.assertRaises(ModelOutputError):
+        with self.assertRaisesRegex(InsufficientSource, "who"):
             rewrite_article("Sale", SOURCE, "https://example.org", client)
         self.assertEqual(client.responses.parse.call_count, 1)
+
+    def test_unsupported_fact_is_dropped_and_never_reaches_the_writer(self):
+        extraction = packet()
+        extraction.facts[1].evidence = "The library announced a million dollar donation"
+        generated = draft()
+        generated.paragraphs[0].fact_ids = ["f1", "f7", "f8"]
+        client = fake_client(extraction, generated)
+        result = rewrite_article("Sale", SOURCE, "https://example.org", client)
+        handed_to_writer = client.responses.parse.call_args_list[1].kwargs["input"][1]["content"]
+        self.assertNotIn("million dollar", handed_to_writer)
+        self.assertNotIn("f2", [fact["id"] for fact in result.evidence["extraction"]["facts"]])
+        validate_publication_article(result)
+
+    def test_writer_cannot_cite_a_dropped_fact(self):
+        extraction = packet()
+        extraction.facts[1].evidence = "The library announced a million dollar donation"
+        with self.assertRaisesRegex(ModelOutputError, "unknown supporting fact IDs"):
+            rewrite_article("Sale", SOURCE, "https://example.org", fake_client(extraction))
 
     def test_wrapped_exact_evidence_is_accepted(self):
         for opening, closing in [('"', '"'), ('“', '”'), ("'", "'"), ('‘', '’')]:
@@ -109,6 +128,15 @@ class RewriterTests(unittest.TestCase):
     def test_wrapped_invented_evidence_is_still_rejected(self):
         extraction = packet()
         extraction.facts[0].evidence = '"The library received a million dollar donation"'
+        client = fake_client(extraction)
+        with self.assertRaisesRegex(InsufficientSource, "who"):
+            rewrite_article("Sale", SOURCE, "https://example.org", client)
+        self.assertEqual(client.responses.parse.call_count, 1)
+
+    def test_extraction_with_no_supported_fact_is_rejected(self):
+        extraction = packet()
+        for fact in extraction.facts:
+            fact.evidence = "The library received a million dollar donation"
         client = fake_client(extraction)
         with self.assertRaisesRegex(ModelOutputError, "Evidence quotation absent"):
             rewrite_article("Sale", SOURCE, "https://example.org", client)

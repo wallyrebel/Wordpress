@@ -13,13 +13,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from openai import OpenAI
 from ai_rewriter import (rewrite_article, fingerprint, clean_text, check_source_length, editorial_format, word_count,
+                         service_notice, MIN_SOURCE_WORDS,
                          validate_publication_article, InsufficientSource, ModelOutputError, PROMPT_VERSION)
 from config import load_config
 from database import Store
 from feed_parser import fetch_feeds_with_raw, enrich_entry
 from image_handler import get_source_image, IMAGE_POLICY_VERSION
 from wordpress_api import WordPressAPI, safe_http_details
-from roundups import rewrite_roundup, candidate_group
+from roundups import rewrite_roundup, candidate_group, MIN_ROUNDUP_SOURCE_WORDS
 from editorial_safety import restricted_source, event_conflict
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ MAX_ITEM_MODEL_ATTEMPTS = 2
 MAX_IMAGE_ATTEMPTS = 3
 IMAGE_RETRY_SECONDS = 1800
 MIN_FEED_COVERAGE_PERCENT = 90
+# A refusal WordPress states outright (bad request, conflict, unsupported file).
+DEFINITE_REJECTIONS = (400, 409, 413, 415, 422)
 
 def apply_feed_health(stats):
     """Report isolated source outages without disguising a wider coverage failure."""
@@ -77,6 +80,66 @@ def reserve_publication(config, stats, store, key, digest, source_urls, feed_has
     store.save(key, digest, intent)
     return intent
 
+def resolve_pending_write(wp, store, item):
+    """Settle an interrupted write from WordPress's own records so the next run can continue.
+
+    The server receipt and source-link search are authoritative. A source whose write
+    left a post is recorded as published; one that left nothing is held rather than
+    retried, so an uncertain write is never blindly recreated. Either way the intent
+    is closed: one interrupted request must not stop every later run.
+    """
+    urls = [url for url in item.get('source_urls') or [] if url]
+    server = wp.receipt(item['source_key'])
+    post_id = server.get('post_id') if isinstance(server, dict) else None
+    if type(post_id) is not int:
+        post_id = next((found for found in (wp.find_source_publication(url) for url in urls)
+                        if type(found) is int), None)
+    record = {key: item[key] for key in ('feed_hash', 'source_url', 'source_urls') if item.get(key)}
+    if post_id:
+        record.update(status='publish', post_id=post_id,
+                      reason='Interrupted write confirmed on WordPress')
+    else:
+        record.update(status='held', interrupted_write=True,
+                      reason='Interrupted write left no post; source held instead of being recreated')
+    store.save(item['source_key'], item['content_hash'], record)
+    return {'source_key': item['source_key'], 'stage': item.get('stage'), **record}
+
+
+def checked_publication(wp, receipt, article, expected_content, media_id, image, stats):
+    """Check the live page, but never treat a display mismatch as an unwritten post.
+
+    By this point WordPress has returned a receipt for a live post. A theme, cache or
+    SEO-plugin difference is reported for an editor; it is not an uncertain write and
+    must not pause the publisher.
+    """
+    from publication_verification import verify_article
+    try:
+        return verify_article(wp, receipt, article, expected_content, media_id, image)
+    except Exception as exc:
+        stats['verification_warnings'] = stats.get('verification_warnings', 0) + 1
+        detail = str(exc)[:200] if type(exc) is ValueError else type(exc).__name__
+        logger.warning('Published post %s needs a display check: %s', receipt.get('post_id'), detail)
+        return {'verified': False, 'post_id': receipt.get('post_id'), 'url': receipt.get('url'),
+                'issue': detail}
+
+
+def processing_priority(item, config):
+    """Time-sensitive notices, then full articles, then short briefs; oldest first in each.
+
+    Oldest-first lets every item have its turn before it ages out of the feed window.
+    """
+    entry = item[0]
+    if service_notice(entry.content):
+        tier = 0
+    elif config.policy(entry.feed_url).allow_scrape or word_count(entry.content) >= MIN_SOURCE_WORDS:
+        tier = 1
+    elif editorial_format(entry.content) == 'brief':
+        tier = 2
+    else:
+        tier = 3
+    return (tier, entry.published or entry.updated or datetime.max.replace(tzinfo=timezone.utc))
+
+
 def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None, authenticated_preview=False):
     started = time.monotonic()
     stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0,
@@ -119,26 +182,20 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
             wp.media_identity('msn-image-'+'0'*64)  # permission/lookup probe only; no asset creation
             pending = store.pending_writes() if store else []
             if pending:
+                # Previously one interrupted request paused every later run until someone
+                # edited the cached database by hand. Settle it from the server instead.
                 setup_stage = 'pending source/media/post outcome reconciliation'
-                stats['write_reconciliation_required'] = True
-                stats['errors'] += 1
-                for item in pending:
-                    server = wp.receipt(item['source_key'])
-                    item['observed_receipt_post_id'] = server.get('post_id')
-                    item['observed_source_post_ids'] = [wp.find_source_publication(url)
-                                                       for url in item['source_urls']]
-                    if item.get('media_identity'):
-                        found = wp.media_identity(item['media_identity']['slug'])
-                        item['observed_media_id'] = found['id'] if found else None
-                        item['observed_media_status'] = found.get('status') if found else None
-                write_json(Path(config.review_dir) / 'pending-write-reconciliation.json', pending)
-                return stats
+                resolved = [resolve_pending_write(wp, store, item) for item in pending]
+                stats['pending_writes_resolved'] = len(resolved)
+                stats['pending_writes_confirmed_published'] = sum(r['status'] == 'publish' for r in resolved)
+                write_json(Path(config.review_dir) / 'pending-write-reconciliation.json', resolved)
+                logger.warning('Settled %s interrupted write(s) from WordPress records; %s confirmed published.',
+                               len(resolved), stats['pending_writes_confirmed_published'])
         setup_stage = 'configured source feed read'
         entries = fetch_feeds_with_raw(config.rss_feeds, config.max_entries_per_feed,
                                        config.max_age_hours, stats)
         # A fixed feed-list order let earlier busy sources starve later sources.
-        entries.sort(key=lambda item: (editorial_format(item[0].content) != 'brief',
-                     item[0].published or item[0].updated or datetime.max.replace(tzinfo=timezone.utc)))
+        entries.sort(key=lambda item: processing_priority(item, config))
         roundup_possible = sum(35 <= word_count(e.content) < 180 and editorial_format(e.content) == 'roundup'
                                for e,_ in entries) >= 3
         seen = set()
@@ -176,7 +233,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
             digest = original_hash
             try:
                 cached = store.get(key) if store else None
-                if cached and cached.get("feed_hash") == original_hash:
+                if cached and (cached.get("feed_hash") == original_hash or cached.get("interrupted_write")):
                     item_attempts = cached.get("model_attempts", 0)
                     image_attempts = cached.get("image_attempts", 0)
                     correction_feedback = cached.get("reason", "")
@@ -254,7 +311,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     if word_count(entry.content) >= 35 and policy.auto_publish:
                         roundup_candidates.append((entry, raw, policy, original_hash, digest))
                         continue
-                    check_source_length(entry.content)
+                    raise InsufficientSource("Fewer than 35 source words; too thin to publish")
                 if format == "full":
                     check_source_length(entry.content)
                 if not dry_run and stats['live_publication_slots_reserved'] >= config.max_new_posts_per_run:
@@ -310,6 +367,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 if policy.category:
                     article = replace(article, category=policy.category)
                 validate_publication_article(article)
+                if not image and not article.evidence.get('extraction', {}).get('public_service'):
+                    # The site accepts a photo-free post only for a public-service notice.
+                    # Hold here instead of letting the server refuse a started write.
+                    raise InsufficientSource('Short article has no eligible featured image and is not a public-service notice')
                 if wp:
                     conflict = event_conflict(wp, entry, client, config.extraction_model)
                     if conflict:
@@ -394,8 +455,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 record["status"], record["receipt"] = 'published_unverified', receipt
                 write_json(Path(config.review_dir) / (key + ".json"), record)
                 stage = 'independent public verification'
-                from publication_verification import verify_article
-                record['public_verification'] = verify_article(wp, receipt, article, article.body + source_line, media_id, image)
+                record['public_verification'] = checked_publication(
+                    wp, receipt, article, article.body + source_line, media_id, image, stats)
                 record['status'] = 'publish'
                 write_json(Path(config.review_dir) / (key + '.json'), record)
                 store.save(key, digest, {**receipt, 'feed_hash': original_hash})
@@ -436,7 +497,13 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     if details.get("api_error_code"):
                         reason += " (" + details["api_error_code"] + ")"
                 logger.error("Item held; source=%s error=%s", key[:12], reason)
-                if mutation_started:
+                if mutation_started and details.get('http_status') in DEFINITE_REJECTIONS:
+                    # WordPress answered and refused this item: nothing was written and
+                    # nothing is uncertain, so hold it and keep publishing the others.
+                    stats['write_rejections'] = stats.get('write_rejections', 0) + 1
+                    store.save(key, digest, {'status': 'held', 'interrupted_write': True,
+                        'feed_hash': original_hash, 'reason': reason, 'source_url': entry.link})
+                elif mutation_started:
                     stats['write_reconciliation_required'] = True
                     pending = {'status': 'write_reconciliation_required', 'source_urls': [entry.link],
                                'source_url': entry.link, 'feed_hash': original_hash, 'receipt': receipt,
@@ -472,10 +539,10 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 stats['daily_after'] = reconciled['daily']
                 write_json(Path(config.review_dir) / 'reconciliation-after.json', reconciled)
                 stats['daily_shortfall'] = reconciled['daily']['remaining']
-                stats['shortfall_action'] = ('Continue on the unchanged next two-hour schedule; inspect holds, source freshness and deferred items. Never bypass evidence or add filler.'
+                stats['shortfall_action'] = ('Continue on the next hourly run; inspect holds, source freshness and deferred items. Never bypass evidence or add filler.'
                                             if stats['daily_shortfall'] else 'Daily goal met; further publication still requires distinct useful verified material.')
                 if stats.get('write_reconciliation_required'):
-                    stats['shortfall_action'] = 'Live writes paused. Reconcile the saved source/media/post intent and public outcome before clearing the exact pending cache record; never recreate blindly.'
+                    stats['shortfall_action'] = 'A write was interrupted, so the rest of this run was deferred. The next run settles it from WordPress records automatically and continues; the source is never recreated blindly.'
             except Exception as exc:
                 stats['errors'] += 1
                 stats['daily_accounting_error'] = type(exc).__name__
@@ -540,8 +607,8 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
                 'text':clean_text(entry.content)})
             if len(selected) == 6:
                 break
-        if len(selected) < 3 or sum(word_count(s['text']) for s in sources) < 250:
-            raise InsufficientSource('Roundup waiting for at least three useful items and 250 source words')
+        if len(selected) < 3 or sum(word_count(s['text']) for s in sources) < MIN_ROUNDUP_SOURCE_WORDS:
+            raise InsufficientSource(f'Roundup waiting for at least three useful items and {MIN_ROUNDUP_SOURCE_WORDS} source words')
         key = hashlib.sha256(('roundup:'+','.join(sorted(s['source_id'] for s in sources))).encode()).hexdigest()
         stats['model_attempts'] += 1
         stats['roundup_attempts'] = stats.get('roundup_attempts',0)+1
@@ -595,8 +662,8 @@ def run_roundup(config, candidates, stats, started, dry_run, client, wp, store, 
         store.save(key, digest, {'status': 'write_reconciliation_required',
             'source_urls': [item[0].link for item in included], 'receipt': receipt, 'media_id': media_id})
         write_json(Path(config.review_dir)/(key+'.json'),record)
-        from publication_verification import verify_article
-        record['public_verification'] = verify_article(wp, receipt, article, article.body, media_id, image)
+        record['public_verification'] = checked_publication(
+            wp, receipt, article, article.body, media_id, image, stats)
         stats['created'] += 1
         stats['roundups_created'] = stats.get('roundups_created',0)+1
         record.update(status='publish',receipt=receipt)

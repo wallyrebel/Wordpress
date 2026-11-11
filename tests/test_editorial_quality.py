@@ -14,14 +14,61 @@ from test_workflow import SOURCE, packet, draft, fake_client
 
 
 class EditorialQualityTests(unittest.TestCase):
-    def test_missing_each_w_stops_before_writer(self):
-        for question in ('who', 'what', 'where', 'when', 'why'):
+    def test_missing_who_or_what_stops_before_writer(self):
+        for question in ('who', 'what'):
             extraction = packet()
             setattr(extraction.five_ws, question, [])
             client = fake_client(extraction=extraction)
             with self.subTest(question=question), self.assertRaisesRegex(InsufficientSource, question):
                 rewrite_article('Story', SOURCE, 'https://example.org', client)
             self.assertEqual(client.responses.parse.call_count, 1)
+
+    def test_unsupplied_where_when_or_why_does_not_block_a_supported_article(self):
+        from ai_rewriter import validate_publication_article
+        for question in ('where', 'when', 'why'):
+            extraction = packet()
+            setattr(extraction.five_ws, question, [])
+            client = fake_client(extraction=extraction)
+            with self.subTest(question=question):
+                validate_publication_article(rewrite_article('Story', SOURCE, 'https://example.org', client))
+                self.assertEqual(client.responses.parse.call_count, 3)
+
+    def test_approved_agency_notice_does_not_need_a_named_who_in_its_own_text(self):
+        from ai_rewriter import validate_publication_article
+        extraction = packet()
+        extraction.five_ws.who = []
+        with self.assertRaisesRegex(InsufficientSource, 'who'):
+            rewrite_article('Notice', SOURCE, 'https://example.org', fake_client(extraction=extraction))
+        extraction = packet()
+        extraction.five_ws.who = []
+        client = fake_client(extraction=extraction)
+        article = rewrite_article('Notice', SOURCE, 'https://example.org', client,
+            publisher='Mississippi Department of Transportation on Facebook', approved_primary_source=True)
+        self.assertTrue(article.evidence['publisher_supplies_who'])
+        self.assertIn('Name that publisher', client.responses.parse.call_args_list[1].kwargs['input'][0]['content'])
+        validate_publication_article(article)
+        # The record alone cannot waive the check for an unapproved source.
+        article.evidence['publisher_supplies_who'] = False
+        with self.assertRaisesRegex(InsufficientSource, 'who'):
+            validate_publication_article(article)
+
+    def test_long_excerpt_is_cut_to_whole_sentences_before_verification(self):
+        from ai_rewriter import shorten_excerpt
+        first = 'Tupelo Library plans a public book sale on September 12 at 10 a.m. in Tupelo.'
+        text = first + ' ' + 'Proceeds support the community reading program and the replacement of worn materials in the collection.'
+        self.assertGreater(len(text), 160)
+        self.assertEqual(shorten_excerpt(text), first)
+        self.assertEqual(shorten_excerpt(first), first)
+        cut = shorten_excerpt('word ' * 60)
+        self.assertLessEqual(len(cut), 160)
+        self.assertTrue(cut.endswith('word\u2026'))
+
+    def test_fact_and_length_floors_match_what_a_short_source_can_support(self):
+        import ai_rewriter
+        self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 100, 3))
+        # A body floor above the source floor can only be met by padding.
+        self.assertLess(ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_SOURCE_WORDS)
+        self.assertLessEqual(ai_rewriter.MIN_BRIEF_WORDS, ai_rewriter.MIN_BRIEF_SOURCE_WORDS)
 
     def test_approval_cannot_bypass_quality(self):
         extraction = packet()

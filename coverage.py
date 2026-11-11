@@ -85,7 +85,8 @@ class CoverageIndex:
             common = wanted & tokens(headline + ' ' + headings)
             if len(common) >= 2 and len(common) / max(1, len(wanted)) >= 0.4:
                 ranked.append((len(common), post))
-        ranked.sort(key=lambda pair: (-pair[0], pair[1]['id']))
-        if len(ranked) > 10:
-            raise ValueError('Too many possible event matches; editorial reconciliation required')
-        return [post for _, post in ranked]
+        ranked.sort(key=lambda pair: (-pair[0], -pair[1]['id']))
+        # A team or agency name alone matches dozens of earlier posts. Raising here
+        # turned every such story into a job failure that was retried each run, so
+        # compare against the ten closest headlines, newest first among equals.
+        return [post for _, post in ranked[:10]]
