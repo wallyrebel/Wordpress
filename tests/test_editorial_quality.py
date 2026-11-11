@@ -74,6 +74,20 @@ class EditorialQualityTests(unittest.TestCase):
         self.assertTrue(numeric_tokens('on Oct. 25') - supported_numbers(source))
         self.assertTrue(numeric_tokens('scored 26 points') - supported_numbers(source))
 
+    def test_day_range_shares_its_month(self):
+        from ai_rewriter import numeric_tokens
+        source = numeric_tokens('closed from 7 p.m. on Friday, Nov. 13 until 4 a.m. on Monday, Nov. 16')
+        for draft in ('closed Nov. 13-16', 'closed Nov. 13 through 16', 'closed November 13 to 16',
+                      'from 7 p.m. Nov. 13 to 4 a.m. Nov. 16'):
+            with self.subTest(draft=draft):
+                self.assertFalse(numeric_tokens(draft) - source)
+        self.assertEqual(numeric_tokens('Nov. 13-15, 2026'), numeric_tokens('November 13 and 15, 2026'))
+        # A changed end date or month still fails, and a clock time is not a day.
+        self.assertTrue(numeric_tokens('closed Nov. 13-17') - source)
+        self.assertTrue(numeric_tokens('closed Dec. 13-16') - source)
+        self.assertEqual(numeric_tokens('Nov. 13 to 4 a.m.'), {'11/13', '4'})
+        self.assertEqual(numeric_tokens('Nov. 13 to 4:30 p.m.'), {'11/13', '4:30'})
+
     def test_fact_and_length_floors_match_what_a_short_source_can_support(self):
         import ai_rewriter
         self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 100, 3))

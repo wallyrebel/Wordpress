@@ -36,6 +36,8 @@ should publish.
 - Telephone numbers are compared by digits, so `(662)-895-4111` matches `662-895-4111`.
 - Each side of a hyphen-joined score or round list is a supported number: a source line
   of `73-75-76` supports "73, 75 and 76". Reversed scores and changed dates still fail.
+- A day range shares its month: "Nov. 13-16" matches a source that gives Nov. 13 and
+  Nov. 16 separately. A changed end date or month still fails.
 - Configured sources are Mississippi organizations, so their own notices are no longer
   rejected for not naming the state.
 - Who and what are required. Where, when and why are reported when the source supplies
