@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v14-daily-volume"
+PROMPT_VERSION = "evidence-v16-official-crime-reports"
 # Editorial floors for automatic publication, not Google ranking requirements.
 # A body floor above what a source can honestly support only produces rejections:
 # the 300-word minimum could not be met from a 180-word source without padding.
@@ -84,6 +84,28 @@ class RewrittenArticle:
     review_reasons: list[str] = field(default_factory=list)
     evidence: dict = field(default_factory=dict)
 
+RESTRICTED_RULE = """Set restricted_content=true for allegations of wrongdoing, criminal cases, or private
+sensitive information about identifiable people, even when stated by an official source.
+Those items require separate editorial approval and must not be automatically published."""
+OFFICIAL_CRIME_RULE = """This publisher is an official agency reporting its own cases. An arrest, charge,
+indictment, wanted notice, incident or investigation it announces is NOT restricted:
+extract it with every attribution and qualifier intact. Set restricted_content=true ONLY
+for private sensitive information about identifiable people: medical or health details,
+personal identifiers, the identity of a victim of a sexual offence, a death by suicide,
+or the name of anyone identified as a juvenile."""
+CRIME_DRAFT_RULE = """
+When the evidence concerns an arrest, charge, wanted notice or investigation, attribute
+every allegation to the agency by name (police said; according to the sheriff's office).
+Say a person was arrested on, charged with or accused of an offence. Never state or imply
+that the person did it or is guilty, and never describe the person beyond the source.
+Do not name anyone identified as a juvenile or any victim of a sexual offence, and omit
+home addresses of private individuals. An unresolved case stays unresolved."""
+CRIME_VERIFY_RULE = """
+For an arrest, charge, wanted notice or investigation, reject wording that states or
+implies guilt, drops the attribution to the agency, or makes an allegation stronger or
+more certain than the source does."""
+
+
 class InsufficientSource(ValueError):
     """Expected editorial rejection, not a transient API failure."""
 
@@ -132,10 +154,11 @@ subject; do not guess an identity or invent an incident to complete the request.
 Extract concrete event details or source-issued advice, not ads, speculation or generic praise.
 Mark sensitive=true for crime, death,
 allegations, missing people, medical claims, politics, emergencies or corrections.
-Set restricted_content=true for allegations of wrongdoing, criminal cases, or private
-sensitive information about identifiable people, even when stated by an official source.
-Those items require separate editorial approval and must not be automatically published.
+{restricted_rule}
 Mississippi relevance must be supported by text or configured publisher identity.
+When approved_primary_source is true, the publisher is a Mississippi organization
+selected by this site: its own announcements, results and notices are Mississippi-
+relevant even when the text never names the state.
 Entities are ONLY named people, organizations and places occurring verbatim in
 source_text. Exclude dates, times, quantities, book types and generic descriptions.
 Do not draft article prose."""
@@ -194,6 +217,8 @@ Set quality_passed=true ONLY if the body meaningfully answers who and what, plus
 and why whenever the source supplies them, adds useful detail without padding, and
 establishes Mississippi relevance. A source that omits a date, place or reason is
 not a quality failure when the draft reports everything the source does supply.
+An approved primary source is a Mississippi organization; do not fail a draft
+merely because its text does not name the state.
 Why may be the source-stated purpose or public impact, never an invented motive.
 An unknown cause alone does not answer why the story matters. Reject repetitive
 paraphrases, generic background, promotional praise, mixed-language artifacts,
@@ -329,7 +354,8 @@ def validate_publication_article(article):
     """Last boundary check before media/taxonomy writes, including other callers."""
     evidence = article.evidence
     from editorial_safety import check_reader_text
-    check_reader_text(article.headline + ' ' + article.excerpt + ' ' + article.body)
+    crime_reports_allowed = bool(evidence.get("crime_reports_allowed"))
+    check_reader_text(article.headline + ' ' + article.excerpt + ' ' + article.body, crime_reports_allowed)
     if evidence.get("prompt_version") != PROMPT_VERSION:
         raise ModelOutputError("Current editorial checks required")
     if evidence.get("format") == "roundup":
@@ -345,7 +371,7 @@ def validate_publication_article(article):
     except ValidationError as exc:
         raise ModelOutputError("Incomplete editorial evidence") from exc
     check_completeness(extraction, format, bool(evidence.get("publisher_supplies_who")))
-    if extraction.restricted_content or extraction.category == 'Crime & Courts':
+    if extraction.restricted_content or (extraction.category == 'Crime & Courts' and not crime_reports_allowed):
         raise InsufficientSource('Allegation or private-sensitive source requires separate editorial approval')
     check_body_quality(draft.paragraphs, extraction.five_ws, format)
     expected_body = "".join("<p>" + html.escape(p.text.strip()) + "</p>" for p in draft.paragraphs)
@@ -422,6 +448,17 @@ def numeric_tokens(value):
                    lambda m: str(int(m.group(1))), value, flags=re.I)
     return set(re.findall(r"\b\d+(?:[.,:/-]\d+)*(?:%|\b)", value))
 
+def supported_numbers(source):
+    """Source numbers, plus each side of a hyphen-joined score, range or round list.
+
+    A source line of "73-75-76" supports a draft that writes "73, 75 and 76", and a
+    "114-19" final supports "scored 114 points". The joined form must still match
+    exactly when a draft uses it, and month/day pairs are never split.
+    """
+    tokens = numeric_tokens(source)
+    return tokens | {part for token in tokens if "-" in token for part in token.split("-") if part}
+
+
 def _call(client, model, effort, schema, prompt, payload, max_tokens, usage):
     try:
         response = client.responses.parse(
@@ -443,7 +480,8 @@ def _call(client, model, effort, schema, prompt, payload, max_tokens, usage):
 def rewrite_article(title, content, link, openai_client, *,
                     extraction_model="gpt-6-luna", drafting_model="gpt-6-luna",
                     publisher="", source_date="", max_source_chars=24000,
-                    approved_primary_source=False, correction_feedback="", format="full"):
+                    approved_primary_source=False, correction_feedback="", format="full",
+                    crime_reports_allowed=False):
     if format not in ("full", "brief"):
         raise ValueError("Unknown article format")
     source = check_source_length(content, max_source_chars) if format == "full" else clean_text(content)
@@ -455,7 +493,8 @@ def rewrite_article(title, content, link, openai_client, *,
         'event previews and notices presented as upcoming. It is not evidence of an event date. '
         'A current report about a past incident or an ongoing appeal can still be useful; '
         'never infer that an unresolved case is closed merely because its incident date is old.')
-    extract_prompt = EXTRACT_PROMPT + time_guidance
+    extract_prompt = EXTRACT_PROMPT.replace(
+        "{restricted_rule}", OFFICIAL_CRIME_RULE if crime_reports_allowed else RESTRICTED_RULE) + time_guidance
     if format == 'brief':
         extract_prompt = extract_prompt.replace('useful full article', 'useful news brief of 60-250 words')
         extract_prompt += ('\nAssess substantive for this BRIEF format: three distinct concrete facts can be enough. '
@@ -469,7 +508,7 @@ def rewrite_article(title, content, link, openai_client, *,
         "publisher": publisher, "source_date": source_date, "current_time": current_time,
         "approved_primary_source": approved_primary_source,
         "previous_validation_error": correction_feedback[:2000]}, 3500, usage)
-    if extraction.restricted_content or extraction.category == 'Crime & Courts':
+    if extraction.restricted_content or (extraction.category == 'Crime & Courts' and not crime_reports_allowed):
         raise InsufficientSource('Allegation or private-sensitive source requires separate editorial approval')
     if not extraction.mississippi_relevant:
         raise InsufficientSource("Source does not establish Mississippi relevance")
@@ -499,6 +538,9 @@ def rewrite_article(title, content, link, openai_client, *,
     check_completeness(extraction, format, publisher_supplies_who)
     draft_prompt = DRAFT_PROMPT + time_guidance
     verify_prompt = VERIFY_PROMPT + time_guidance
+    if crime_reports_allowed:
+        draft_prompt += CRIME_DRAFT_RULE
+        verify_prompt += CRIME_VERIFY_RULE
     if format == "brief":
         draft_prompt = draft_prompt.replace("Write 150-500 BODY words", "Write 60-250 BODY words").replace(
             "reach 150 words", "reach 60 words").replace("Use 3-8 useful paragraphs", "Use 2-5 useful paragraphs")
@@ -543,11 +585,11 @@ def rewrite_article(title, content, link, openai_client, *,
             raise ModelOutputError("HTML forbidden in generated text")
     combined = " ".join([draft.headline, draft.excerpt] + [p.text for p in draft.paragraphs])
     from editorial_safety import check_reader_text
-    check_reader_text(combined)
+    check_reader_text(combined, crime_reports_allowed)
     check_direct_quotes(combined, source)
     if len(combined.split()) > 650:
         raise ModelOutputError("Draft exceeds maximum length")
-    unsupported_numbers = numeric_tokens(combined) - numeric_tokens(source)
+    unsupported_numbers = numeric_tokens(combined) - supported_numbers(source)
     if unsupported_numbers:
         raise ModelOutputError("Numeric tokens absent from source: " + ", ".join(sorted(unsupported_numbers)))
     check_body_quality(draft.paragraphs, extraction.five_ws, format)
@@ -580,4 +622,5 @@ def rewrite_article(title, content, link, openai_client, *,
         {"prompt_version": PROMPT_VERSION, "format": format, "extraction": extraction.model_dump(),
          "draft": draft.model_dump(), "verification": verification.model_dump(), "usage": usage,
          "publisher_supplies_who": publisher_supplies_who,
+         "crime_reports_allowed": bool(crime_reports_allowed),
          "source_words": word_count(source), "body_words": word_count(body)})

@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from pydantic import ValidationError
 from ai_rewriter import (StrictModel, Extraction, Draft, Verification, RewrittenArticle,
-    EXTRACT_PROMPT, VERIFY_PROMPT, PROMPT_VERSION, InsufficientSource, ModelOutputError,
-    _call, clean_text, word_count, normalized, source_evidence, numeric_tokens,
+    EXTRACT_PROMPT as _EXTRACT_TEMPLATE, RESTRICTED_RULE, VERIFY_PROMPT, PROMPT_VERSION, InsufficientSource, ModelOutputError,
+    _call, clean_text, word_count, normalized, source_evidence, numeric_tokens, supported_numbers,
     check_direct_quotes, check_completeness, check_body_quality)
 
 
@@ -14,6 +14,10 @@ from ai_rewriter import (StrictModel, Extraction, Draft, Verification, Rewritten
 # so the floors match what three to six such posts can honestly support.
 MIN_ROUNDUP_SOURCE_WORDS = 150
 MIN_ROUNDUP_BODY_WORDS = 150
+
+
+# Briefings never carry crime reports: those publish only as standalone articles.
+EXTRACT_PROMPT = _EXTRACT_TEMPLATE.replace('{restricted_rule}', RESTRICTED_RULE)
 
 
 class ExtractedSection(StrictModel):
@@ -92,7 +96,7 @@ def validate_sections(sources, extracted, drafted):
         from editorial_safety import check_reader_text
         check_reader_text(combined)
         check_direct_quotes(combined, source)
-        unsupported = numeric_tokens(combined) - numeric_tokens(source)
+        unsupported = numeric_tokens(combined) - supported_numbers(source)
         if unsupported:
             raise ModelOutputError('Roundup numbers absent from source ' + section.source_id[:12]
                 + ': ' + ', '.join(sorted(unsupported)))
