@@ -14,14 +14,31 @@ from test_workflow import SOURCE, packet, draft, fake_client
 
 
 class EditorialQualityTests(unittest.TestCase):
-    def test_missing_each_w_stops_before_writer(self):
-        for question in ('who', 'what', 'where', 'when', 'why'):
+    def test_missing_who_or_what_stops_before_writer(self):
+        for question in ('who', 'what'):
             extraction = packet()
             setattr(extraction.five_ws, question, [])
             client = fake_client(extraction=extraction)
             with self.subTest(question=question), self.assertRaisesRegex(InsufficientSource, question):
                 rewrite_article('Story', SOURCE, 'https://example.org', client)
             self.assertEqual(client.responses.parse.call_count, 1)
+
+    def test_unsupplied_where_when_or_why_does_not_block_a_supported_article(self):
+        from ai_rewriter import validate_publication_article
+        for question in ('where', 'when', 'why'):
+            extraction = packet()
+            setattr(extraction.five_ws, question, [])
+            client = fake_client(extraction=extraction)
+            with self.subTest(question=question):
+                validate_publication_article(rewrite_article('Story', SOURCE, 'https://example.org', client))
+                self.assertEqual(client.responses.parse.call_count, 3)
+
+    def test_fact_and_length_floors_match_what_a_short_source_can_support(self):
+        import ai_rewriter
+        self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 120, 3))
+        # A body floor above the source floor can only be met by padding.
+        self.assertLess(ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_SOURCE_WORDS)
+        self.assertLessEqual(ai_rewriter.MIN_BRIEF_WORDS, ai_rewriter.MIN_BRIEF_SOURCE_WORDS)
 
     def test_approval_cannot_bypass_quality(self):
         extraction = packet()

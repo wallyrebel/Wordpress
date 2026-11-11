@@ -126,16 +126,62 @@ class BalancedCoverageTests(unittest.TestCase):
         self.assertLess(result.evidence['body_words'],300)
         self.assertGreaterEqual(result.evidence['body_words'],70)
 
-    def test_short_promotional_item_cannot_claim_brief_exception(self):
-        with self.assertRaisesRegex(InsufficientSource,'public-service'):
-            rewrite_article('Notice',fixtures.SOURCE,'https://example.org',fixtures.fake_client(),format='brief')
+    def test_short_item_without_public_service_value_cannot_publish_without_a_photo(self):
+        fixture = fixtures.PublishingTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        f = fixture
+        f.entry = replace(f.entry, content='Road closure. '+fixtures.SOURCE)
+        d = fixtures.draft()
+        d.paragraphs = d.paragraphs[:2]
+        f.article = rewrite_article('Notice',fixtures.SOURCE,f.entry.link,
+            fixtures.fake_client(generated=d),format='brief')
+        self.assertFalse(f.article.evidence['extraction']['public_service'])
+        stats = f.run_flow(image=False)
+        self.assertEqual(stats['created'],0)
+        self.assertEqual(stats['errors'],0)
+        self.assertEqual(list(stats['reasons']),
+            ['Short article has no eligible featured image and is not a public-service notice'])
+        f.wp.taxonomy.assert_not_called()
+        f.wp.upsert.assert_not_called()
 
-    def test_brief_still_requires_when_where_and_verified_claims(self):
+    def test_short_news_brief_with_a_photo_publishes_without_public_service_flag(self):
+        fixture = fixtures.PublishingTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        f = fixture
+        f.entry = replace(f.entry, content='Road closure. '+fixtures.SOURCE)
+        d = fixtures.draft()
+        d.paragraphs = d.paragraphs[:2]
+        f.article = rewrite_article('Notice',fixtures.SOURCE,f.entry.link,
+            fixtures.fake_client(generated=d),format='brief')
+        stats = f.run_flow()
+        self.assertEqual(stats['created'],1)
+        self.assertEqual(stats['brief_created'],1)
+        self.assertEqual(f.wp.upsert.call_args.args[0]['featured_media'],3)
+
+    def test_brief_still_requires_who_and_what(self):
+        for question in ('who','what'):
+            p = fixtures.packet()
+            setattr(p.five_ws,question,[])
+            with self.subTest(question=question), self.assertRaisesRegex(InsufficientSource,question):
+                rewrite_article('Notice',fixtures.SOURCE,'https://example.org',fixtures.fake_client(extraction=p),format='brief')
+
+    def test_brief_reports_a_source_that_omits_date_and_place(self):
         p = fixtures.packet()
-        p.public_service = True
         p.five_ws.when = []
-        with self.assertRaisesRegex(InsufficientSource,'when'):
-            rewrite_article('Notice',fixtures.SOURCE,'https://example.org',fixtures.fake_client(extraction=p),format='brief')
+        p.five_ws.where = []
+        d = fixtures.draft()
+        d.paragraphs = d.paragraphs[:2]
+        result = rewrite_article('Notice',fixtures.SOURCE,'https://example.org',
+            fixtures.fake_client(extraction=p,generated=d),format='brief')
+        validate_publication_article(result)
+
+    def test_mid_length_posts_are_judged_alone_instead_of_waiting_for_a_roundup(self):
+        sentence = 'The college named its new dean of students during a campus ceremony attended by faculty. '
+        self.assertEqual(editorial_format(sentence*2),'roundup')
+        self.assertEqual(editorial_format(sentence*5),'brief')
+        self.assertEqual(editorial_format(sentence*13),'full')
 
     def test_three_source_roundup_is_valid_and_each_section_has_its_link(self):
         sources, p, d = bundle()
@@ -161,7 +207,7 @@ class BalancedCoverageTests(unittest.TestCase):
         for section in d.sections[1:]:
             city = 'Oxford' if section.source_id == 'source1' else 'Corinth'
             section.draft.paragraphs = [Paragraph(text=concise.replace('Tupelo',city),fact_ids=['f1','f2','f3','f7','f8'])]
-        with self.assertRaisesRegex(InsufficientSource,'250-900'):
+        with self.assertRaisesRegex(InsufficientSource,'150-900'):
             validate_sections(sources,p,d)
 
     def test_briefing_date_uses_mississippi_calendar_not_utc(self):

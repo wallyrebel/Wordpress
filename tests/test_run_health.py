@@ -55,5 +55,24 @@ class RunHealthTests(unittest.TestCase):
         self.assertEqual(run_exit_code(stats), 0)
 
 
+class ScheduledPublishingTests(unittest.TestCase):
+    """The publisher was once left switched to preview-only; keep that visible."""
+    workflow = (Path(__file__).resolve().parents[1] / '.github' / 'workflows' / 'rss-automation.yml').read_text(encoding='utf-8')
+
+    def test_scheduled_runs_publish_live_every_hour(self):
+        self.assertIn("PUBLISHER_LIVE: 'true'", self.workflow)
+        self.assertIn("- cron: '17 * * * *'", self.workflow)
+        self.assertIn('python main.py --authenticated-preview', self.workflow)
+
+    def test_no_daily_ceiling_and_defaults_allow_ten_or_more_posts_a_day(self):
+        from config import Config
+        cfg = Config('k', 'https://example.org', 'u', 'p', ['https://example.org/feed'])
+        self.assertFalse(hasattr(cfg, 'max_posts_per_day'))
+        self.assertNotIn('MAX_POSTS_PER_DAY', self.workflow)
+        self.assertGreaterEqual(cfg.max_new_posts_per_run * 24, 100)
+        self.assertGreaterEqual(cfg.max_posts_per_run, cfg.max_new_posts_per_run * 2)
+        self.assertEqual(cfg.reconciliation_anchor_ids, ())
+
+
 if __name__ == '__main__':
     unittest.main()

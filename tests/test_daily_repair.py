@@ -113,7 +113,7 @@ class RepairBoundaryTests(TestCase):
         self.assertGreater(stats['errors'],0);model.assert_not_called();f.wp.upsert.assert_not_called()
 
     def test_per_run_limit_prevents_bulk_catchup_without_holding_remaining_sources(self):
-        f=self.f; f.cfg.max_entries_per_feed=8
+        f=self.f; f.cfg.max_entries_per_feed=8; f.cfg.max_new_posts_per_run=2
         entries=[(replace(f.entry,link=f'https://example.org/{i}'),{}) for i in range(4)]
         f.wp.upsert.side_effect=[{'post_id':10,'status':'publish'},{'post_id':11,'status':'publish'}]
         with patch('main.fetch_feeds_with_raw',return_value=entries), \
@@ -140,37 +140,42 @@ class RepairBoundaryTests(TestCase):
         stats=f.run_flow()
         self.assertEqual(stats['errors'],1);f.wp.upsert.assert_not_called();f.wp.upload_media.assert_not_called()
 
-    def test_verification_timeout_preserves_receipt_and_does_not_repeat_write(self):
+    def test_display_check_failure_keeps_the_live_post_and_does_not_repeat_write(self):
         f=self.f
         with patch('publication_verification.verify_article',side_effect=TimeoutError()):
             stats=f.run_flow()
-        self.assertEqual(stats['errors'],1)
+        # WordPress returned a receipt: the post is live, so it counts and is flagged.
+        self.assertEqual(stats['errors'],0);self.assertEqual(stats['created'],1)
+        self.assertEqual(stats['verification_warnings'],1)
+        self.assertNotIn('write_reconciliation_required',stats)
         f.wp.upsert.assert_called_once()
         import json
         from main import source_key
         record=json.loads((Path(f.cfg.review_dir)/(source_key(f.entry)+'.json')).read_text())
         self.assertEqual(record['receipt']['post_id'],4)
-        self.assertEqual(record['stage'],'independent public verification')
+        self.assertEqual(record['status'],'publish')
+        self.assertEqual(record['public_verification'],
+            {'verified':False,'post_id':4,'url':None,'issue':'TimeoutError'})
         f.wp.upsert.reset_mock()
         f.run_flow()
         f.wp.upsert.assert_not_called()
 
-    def test_verification_failure_with_repeated_candidates_consumes_slot_and_stops_run(self):
-        f=self.f; f.cfg.max_entries_per_feed=8
+    def test_display_check_failures_do_not_stop_the_other_candidates(self):
+        f=self.f; f.cfg.max_entries_per_feed=8; f.cfg.max_new_posts_per_run=3
         entries=[(replace(f.entry,link=f'https://example.org/{i}'),{}) for i in range(5)]
         with patch('main.fetch_feeds_with_raw',return_value=entries), \
              patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/a.jpg')), \
              patch('main.rewrite_article',return_value=f.article), \
-             patch('publication_verification.verify_article',side_effect=TimeoutError()):
+             patch('publication_verification.verify_article',side_effect=ValueError('Public description differs from reviewed excerpt')):
             stats=run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
-        self.assertEqual(stats['created'],0)
-        self.assertEqual(stats['live_publication_slots_reserved'],1)
-        self.assertEqual(stats['live_article_write_attempts'],1)
-        self.assertTrue(stats['write_reconciliation_required'])
-        self.assertEqual(stats['deferred'],4)
-        f.wp.upsert.assert_called_once();f.wp.upload_media.assert_called_once()
+        self.assertEqual(stats['created'],3)
+        self.assertEqual(stats['verification_warnings'],3)
+        self.assertEqual(stats['live_publication_slots_reserved'],3)
+        self.assertNotIn('write_reconciliation_required',stats)
+        self.assertEqual(stats['deferred'],2)
+        self.assertEqual(f.wp.upsert.call_count,3)
 
-    def test_uncertain_create_stops_other_candidates_and_quarantines_next_run(self):
+    def test_uncertain_create_stops_this_run_and_next_run_settles_it_and_continues(self):
         f=self.f; f.cfg.max_entries_per_feed=8;f.wp.upsert.side_effect=TimeoutError()
         entries=[(replace(f.entry,link=f'https://example.org/{i}'),{}) for i in range(5)]
         with patch('main.fetch_feeds_with_raw',return_value=entries), \
@@ -180,13 +185,38 @@ class RepairBoundaryTests(TestCase):
         self.assertEqual(stats['live_article_write_attempts'],1)
         self.assertEqual(stats['live_publication_slots_reserved'],1)
         self.assertTrue(stats['write_reconciliation_required']);f.wp.upsert.assert_called_once()
+        interrupted=f.wp.upsert.call_args.args[0]['source_url']
         f.wp.upsert.reset_mock(); f.wp.upload_media.reset_mock()
-        with patch('main.fetch_feeds_with_raw') as feeds:
+        f.wp.upsert.side_effect=None
+        # WordPress has no receipt and no post for the interrupted source: it is held,
+        # never recreated, and every other candidate publishes normally.
+        with patch('main.fetch_feeds_with_raw',return_value=entries), \
+             patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/a.jpg')), \
+             patch('main.rewrite_article',return_value=f.article):
             again=run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
-        self.assertTrue(again['write_reconciliation_required'])
-        feeds.assert_not_called();f.wp.upsert.assert_not_called();f.wp.upload_media.assert_not_called()
+        self.assertNotIn('write_reconciliation_required',again)
+        self.assertEqual(again['pending_writes_resolved'],1)
+        self.assertEqual(again['pending_writes_confirmed_published'],0)
+        self.assertEqual(again['errors'],0);self.assertEqual(again['created'],4)
+        self.assertNotIn(interrupted,[call.args[0]['source_url'] for call in f.wp.upsert.call_args_list])
 
-    def test_interrupted_intent_survives_a_changed_source_fingerprint(self):
+    def test_interrupted_write_that_reached_wordpress_is_recorded_as_published(self):
+        from database import Store
+        from main import source_key
+        f=self.f;store=Store(f.cfg.database_path)
+        store.save(source_key(f.entry),'old-digest',{'status':'write_reconciliation_required',
+            'source_urls':[f.entry.link],'feed_hash':'an-older-source-fingerprint'})
+        store.close()
+        f.wp.receipt.return_value={'post_id':77,'versions':{}}
+        stats=f.run_flow()
+        self.assertEqual(stats['pending_writes_confirmed_published'],1)
+        self.assertNotIn('write_reconciliation_required',stats)
+        f.wp.upsert.assert_not_called()
+        store=Store(f.cfg.database_path)
+        self.assertEqual(store.pending_writes(),[])
+        store.close()
+
+    def test_interrupted_intent_is_never_recreated_even_after_its_fingerprint_changes(self):
         from database import Store
         from main import source_key
         f=self.f;store=Store(f.cfg.database_path)
@@ -194,7 +224,34 @@ class RepairBoundaryTests(TestCase):
             'source_urls':[f.entry.link],'feed_hash':'an-older-source-fingerprint'})
         store.close()
         stats=f.run_flow()
-        self.assertTrue(stats['write_reconciliation_required']);f.wp.upsert.assert_not_called()
+        self.assertEqual(stats['pending_writes_resolved'],1)
+        self.assertNotIn('write_reconciliation_required',stats)
+        self.assertEqual(stats['errors'],0);f.wp.upsert.assert_not_called()
+        f.run_flow()
+        f.wp.upsert.assert_not_called()
+
+    def test_stated_wordpress_refusal_holds_one_item_and_keeps_publishing(self):
+        import requests
+        f=self.f; f.cfg.max_entries_per_feed=8
+        refused=requests.HTTPError(response=Mock(status_code=400,json=Mock(return_value={'code':'bad_image'})))
+        f.wp.upsert.side_effect=[refused,{'post_id':10,'status':'publish'},{'post_id':11,'status':'publish'}]
+        entries=[(replace(f.entry,link=f'https://example.org/{i}'),{}) for i in range(3)]
+        with patch('main.fetch_feeds_with_raw',return_value=entries), \
+             patch('main.get_source_image',return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/a.jpg')), \
+             patch('main.rewrite_article',return_value=f.article):
+            stats=run_feed_processing(f.cfg,client=Mock(),wp=f.wp)
+        self.assertEqual(stats['created'],2);self.assertEqual(stats['write_rejections'],1)
+        self.assertNotIn('write_reconciliation_required',stats)
+        from database import Store
+        store=Store(f.cfg.database_path)
+        self.assertEqual(store.pending_writes(),[])
+        store.close()
+
+    def test_many_similar_headlines_are_compared_instead_of_failing_the_run(self):
+        posts=[post(100+i,title='Blue Mountain women basketball wins again') for i in range(14)]
+        index=CoverageIndex(posts,STATUSES)
+        found=index.event_candidates('Blue Mountain women basketball wins opener')
+        self.assertEqual([p['id'] for p in found],list(range(113,103,-1)))
 
 
 class PlaceholderTests(TestCase):
