@@ -34,6 +34,10 @@ should publish.
   the whole item; the remaining facts must still pass every check.
 - The verifier lists only material problems. Style notes no longer fail an accurate draft.
 - Telephone numbers are compared by digits, so `(662)-895-4111` matches `662-895-4111`.
+- Each side of a hyphen-joined score or round list is a supported number: a source line
+  of `73-75-76` supports "73, 75 and 76". Reversed scores and changed dates still fail.
+- Configured sources are Mississippi organizations, so their own notices are no longer
+  rejected for not naming the state.
 - Who and what are required. Where, when and why are reported when the source supplies
   them; a source that omits one no longer disqualifies the story.
 - An interrupted write is settled from WordPress's own receipt and source-link records

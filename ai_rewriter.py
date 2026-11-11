@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 Category = Literal["Mississippi News", "Politics", "Crime & Courts", "Education",
                    "Business", "Health", "Weather", "Sports", "Community"]
 CATEGORIES = list(Category.__args__)
-PROMPT_VERSION = "evidence-v15-official-crime-reports"
+PROMPT_VERSION = "evidence-v16-official-crime-reports"
 # Editorial floors for automatic publication, not Google ranking requirements.
 # A body floor above what a source can honestly support only produces rejections:
 # the 300-word minimum could not be met from a 180-word source without padding.
@@ -156,6 +156,9 @@ Mark sensitive=true for crime, death,
 allegations, missing people, medical claims, politics, emergencies or corrections.
 {restricted_rule}
 Mississippi relevance must be supported by text or configured publisher identity.
+When approved_primary_source is true, the publisher is a Mississippi organization
+selected by this site: its own announcements, results and notices are Mississippi-
+relevant even when the text never names the state.
 Entities are ONLY named people, organizations and places occurring verbatim in
 source_text. Exclude dates, times, quantities, book types and generic descriptions.
 Do not draft article prose."""
@@ -214,6 +217,8 @@ Set quality_passed=true ONLY if the body meaningfully answers who and what, plus
 and why whenever the source supplies them, adds useful detail without padding, and
 establishes Mississippi relevance. A source that omits a date, place or reason is
 not a quality failure when the draft reports everything the source does supply.
+An approved primary source is a Mississippi organization; do not fail a draft
+merely because its text does not name the state.
 Why may be the source-stated purpose or public impact, never an invented motive.
 An unknown cause alone does not answer why the story matters. Reject repetitive
 paraphrases, generic background, promotional praise, mixed-language artifacts,
@@ -443,6 +448,17 @@ def numeric_tokens(value):
                    lambda m: str(int(m.group(1))), value, flags=re.I)
     return set(re.findall(r"\b\d+(?:[.,:/-]\d+)*(?:%|\b)", value))
 
+def supported_numbers(source):
+    """Source numbers, plus each side of a hyphen-joined score, range or round list.
+
+    A source line of "73-75-76" supports a draft that writes "73, 75 and 76", and a
+    "114-19" final supports "scored 114 points". The joined form must still match
+    exactly when a draft uses it, and month/day pairs are never split.
+    """
+    tokens = numeric_tokens(source)
+    return tokens | {part for token in tokens if "-" in token for part in token.split("-") if part}
+
+
 def _call(client, model, effort, schema, prompt, payload, max_tokens, usage):
     try:
         response = client.responses.parse(
@@ -573,7 +589,7 @@ def rewrite_article(title, content, link, openai_client, *,
     check_direct_quotes(combined, source)
     if len(combined.split()) > 650:
         raise ModelOutputError("Draft exceeds maximum length")
-    unsupported_numbers = numeric_tokens(combined) - numeric_tokens(source)
+    unsupported_numbers = numeric_tokens(combined) - supported_numbers(source)
     if unsupported_numbers:
         raise ModelOutputError("Numeric tokens absent from source: " + ", ".join(sorted(unsupported_numbers)))
     check_body_quality(draft.paragraphs, extraction.five_ws, format)

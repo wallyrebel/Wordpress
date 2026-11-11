@@ -63,6 +63,17 @@ class EditorialQualityTests(unittest.TestCase):
         self.assertLessEqual(len(cut), 160)
         self.assertTrue(cut.endswith('word\u2026'))
 
+    def test_each_side_of_a_joined_score_or_round_list_is_supported(self):
+        from ai_rewriter import numeric_tokens, supported_numbers
+        source = 'She shot 73-75-76 and State won 114-19 on 10/26.'
+        self.assertFalse(numeric_tokens('Rounds of 73, 75 and 76; State scored 114.') - supported_numbers(source))
+        self.assertFalse(numeric_tokens('State won 114-19.') - supported_numbers(source))
+        # A reversed score, an invented number and a changed month/day still fail.
+        self.assertEqual(numeric_tokens('State won 19-114.') - supported_numbers(source), {'19-114'})
+        self.assertEqual(numeric_tokens('She shot 74.') - supported_numbers(source), {'74'})
+        self.assertTrue(numeric_tokens('on Oct. 25') - supported_numbers(source))
+        self.assertTrue(numeric_tokens('scored 26 points') - supported_numbers(source))
+
     def test_fact_and_length_floors_match_what_a_short_source_can_support(self):
         import ai_rewriter
         self.assertEqual((ai_rewriter.MIN_FACTS, ai_rewriter.MIN_ARTICLE_WORDS, ai_rewriter.MIN_PARAGRAPHS), (5, 100, 3))
