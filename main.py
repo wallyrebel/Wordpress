@@ -21,7 +21,7 @@ from feed_parser import fetch_feeds_with_raw, enrich_entry
 from image_handler import get_source_image, IMAGE_POLICY_VERSION
 from wordpress_api import WordPressAPI, safe_http_details
 from roundups import rewrite_roundup, candidate_group, MIN_ROUNDUP_SOURCE_WORDS
-from editorial_safety import restricted_source, event_conflict
+from editorial_safety import restricted_source, event_conflict, official_crime_source, crime_note
 
 logger = logging.getLogger(__name__)
 MAX_ITEM_MODEL_ATTEMPTS = 2
@@ -281,7 +281,9 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     continue
                 stage = "source article enrichment"
                 entry = enrich_entry(entry, policy, raw)
-                if restricted_source(entry.title + ' ' + entry.content):
+                # Arrest and crime reports publish only when the agency itself is the source.
+                crime_ok = official_crime_source(policy.publisher)
+                if restricted_source(entry.title + ' ' + entry.content, crime_ok):
                     raise InsufficientSource('Allegation or private-sensitive source requires separate editorial approval')
                 digest = fingerprint(entry.title, entry.content)
                 if digest in prior.get("versions", {}):
@@ -353,7 +355,8 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                             publisher=policy.publisher,
                             source_date=(entry.published or entry.updated).isoformat(),
                             approved_primary_source=policy.reuse_allowed and policy.auto_publish,
-                            correction_feedback=correction_feedback, format=format)
+                            correction_feedback=correction_feedback, format=format,
+                            crime_reports_allowed=crime_ok)
                         break
                     except (ModelOutputError, InsufficientSource) as exc:
                         repairable = isinstance(exc, ModelOutputError) or str(exc) == "Missing central facts"
@@ -436,7 +439,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 if image and not media_id:
                     raise ValueError("Featured image upload failed")
                 publisher = policy.publisher or "original source"
-                source_line = '<p class="news-source">Source: <a href="' + html.escape(
+                source_line = crime_note(article) + '<p class="news-source">Source: <a href="' + html.escape(
                     entry.link, quote=True) + '">' + html.escape(publisher) + "</a>.</p>"
                 stage = "WordPress article publication"
                 stats['live_article_write_attempts'] += 1

@@ -1,12 +1,29 @@
-"""Publication boundaries that cannot be relaxed to meet a daily goal."""
+"""Publication boundaries that cannot be relaxed to meet a daily goal.
+
+On November 11, 2026 the publisher approved automatic publication of arrest and crime
+reports issued by official agencies. Private-sensitive material stays held from every
+source, and crime content from any other kind of source stays held as before.
+"""
 import re
 import hashlib
 import json
 from bs4 import BeautifulSoup
 
-RESTRICTED = re.compile(r'\b(alleg\w*|arrest\w*|charged|charges against|homicide|murder\w*|'
-                        r'raped?|sexual assault|indicted|suspect|criminal complaint|suicide|'
-                        r'social security|patient records?|medical records?)\b', re.I)
+# Held from every source, official or not.
+PRIVATE = re.compile(r'\b(raped?|sexual (?:assault|battery|abuse)|molest\w*|suicide|'
+                     r'social security|patient records?|medical records?)\b', re.I)
+# Held unless the source is the official agency making the announcement.
+CRIME = re.compile(r'\b(alleg\w*|arrest\w*|charged|charges against|homicide|murder\w*|'
+                   r'indicted|suspect|criminal complaint)\b', re.I)
+# Law enforcement, prosecutors and government bodies speaking for themselves. Schools,
+# athletics departments, chambers, venues, podcasts and reporters are not on this list.
+OFFICIAL_AGENCY = re.compile(
+    r"\b(police|sheriff(?:'s|\u2019s|s)?|district attorney(?:'s|\u2019s)?|attorney general|"
+    r"crime stoppers|public safety|highway patrol|bureau of investigation|"
+    r"department of corrections|state auditor|city of|town of|county government|"
+    r"county, ms|municipal government|mayor(?:'s|\u2019s)? office)\b|\bS\.O\.", re.I)
+PRESUMPTION_NOTE = ('<p class="news-note">An arrest or charge is an accusation. Anyone accused '
+                    'is presumed innocent unless proven guilty in court.</p>')
 PLACEHOLDER = re.compile(r'\b(?:not (?:provided|specified|reported|available|disclosed|mentioned)|'
                          r'(?:details?|information|date|time|location|name|identity|cause) '
                          r'(?:is |are |was |were )?(?:unknown|unavailable|unspecified)|'
@@ -14,16 +31,31 @@ PLACEHOLDER = re.compile(r'\b(?:not (?:provided|specified|reported|available|dis
                          r'missing information)\b|\[(?:insert|name|date|location|unknown)[^\]]*\]', re.I)
 
 
-def restricted_source(text):
-    return bool(RESTRICTED.search(BeautifulSoup(text, 'html.parser').get_text(' ', strip=True)))
+def official_crime_source(publisher):
+    """True when the configured publisher is an agency that may report its own cases."""
+    return bool(OFFICIAL_AGENCY.search(publisher or ''))
 
 
-def check_reader_text(text):
+def _restricted(value, crime_reports_allowed):
+    return bool(PRIVATE.search(value) or (not crime_reports_allowed and CRIME.search(value)))
+
+
+def restricted_source(text, crime_reports_allowed=False):
+    return _restricted(BeautifulSoup(text, 'html.parser').get_text(' ', strip=True), crime_reports_allowed)
+
+
+def crime_note(article):
+    """Fixed presumption-of-innocence line for any published crime report."""
+    text = BeautifulSoup(article.headline + ' ' + article.body, 'html.parser').get_text(' ', strip=True)
+    return PRESUMPTION_NOTE if article.category == 'Crime & Courts' or CRIME.search(text) else ''
+
+
+def check_reader_text(text, crime_reports_allowed=False):
     from ai_rewriter import ModelOutputError
     value = BeautifulSoup(text, 'html.parser').get_text(' ', strip=True)
     if PLACEHOLDER.search(value):
         raise ModelOutputError('Missing-information placeholder in reader-facing text; omit unsupported detail')
-    if RESTRICTED.search(value):
+    if _restricted(value, crime_reports_allowed):
         raise ModelOutputError('Allegation or private-sensitive content requires separate editorial approval')
 
 

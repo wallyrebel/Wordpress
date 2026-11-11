@@ -50,13 +50,39 @@ should publish.
 
 - Every fact still needs an exact quotation from the source, numbers and direct quotes
   are still checked against it, and a separate verification call must still pass.
-- Allegations, criminal cases and private sensitive information still require separate
-  editorial approval and are not published automatically. Most configured sources are
-  police and sheriff pages, so this remains the largest group of unpublished items.
+- Private sensitive information (sexual offences, suicide, medical or patient records,
+  personal identifiers) is still held from every source. See the next section for arrest
+  and crime reports, which the publisher approved later the same day.
 - Greetings, thank-you posts, teasers and items with no concrete development still fail.
 - Image rules are unchanged: 600×400 minimum, required for everything except
   public-service briefs and briefings. The WordPress companion plugin enforces the same.
 - Duplicate-source, duplicate-headline and same-event checks are unchanged.
+
+## Arrest and crime reports
+
+The October 27 rule held every allegation and criminal case for separate editorial
+approval. Most configured sources are police and sheriff pages, so that was the largest
+group of unpublished items. On November 11 the publisher approved publishing them
+automatically, within these limits:
+
+- **Official sources only.** The report must come from the agency itself: a police or
+  sheriff's department, district attorney, attorney general, Department of Public Safety,
+  Department of Corrections, State Auditor, Crime Stoppers, or a city, town or county
+  government feed. The list is the `OFFICIAL_AGENCY` pattern in `editorial_safety.py`.
+  The same content from a school, athletics department, chamber, venue, podcast or
+  reporter is still held before any model call.
+- **Attribution and no implied guilt.** The writer must attribute every allegation to the
+  agency and say a person was arrested on, charged with or accused of an offence. The
+  verifier rejects wording that states or implies guilt or strengthens an allegation.
+- **Presumption note.** Every published crime report ends with a fixed line: "An arrest
+  or charge is an accusation. Anyone accused is presumed innocent unless proven guilty
+  in court."
+- **Still held from every source:** sexual offences, suicide, medical or patient records,
+  personal identifiers, and anything the extractor flags as private sensitive
+  information, including the name of a juvenile or of a sexual-offence victim.
+- Crime reports publish only as standalone articles, never inside a multi-source briefing.
+
+To reverse this, make `official_crime_source` in `editorial_safety.py` return `False`.
 
 ## Turning it off or down
 
