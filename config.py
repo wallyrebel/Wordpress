@@ -42,7 +42,7 @@ class Config:
     sources: dict[str, SourcePolicy] = field(default_factory=dict)
     category_ids: dict[str, int] = field(default_factory=dict)
     daily_article_goal: int = 10
-    max_new_posts_per_run: int = 5
+    max_new_posts_per_run: int = 8
     # Fixed anchors made the whole run fail if an editor ever deleted one of two
     # specific posts. Reconciliation covers every recent post without them.
     reconciliation_anchor_ids: tuple[int, ...] = ()
@@ -105,4 +105,4 @@ def load_config(require_wp=True):
         max_age_hours=positive("MAX_AGE_HOURS", 24), sources=sources, category_ids=categories,
         review_dir=os.getenv("REVIEW_DIR", "./review"),
         daily_article_goal=positive('DAILY_ARTICLE_GOAL', 10),
-        max_new_posts_per_run=positive('MAX_NEW_POSTS_PER_RUN', 5))
+        max_new_posts_per_run=positive('MAX_NEW_POSTS_PER_RUN', 8))
