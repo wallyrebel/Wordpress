@@ -123,6 +123,11 @@ results, dates, locations, participants, source-stated context and next steps.
 For sports coverage, retain the sport or discipline when the source establishes it.
 Preserve attribution, allegations, uncertainty, dates and numbers.
 Assess whether there is enough substantive information for a useful full article.
+For an employer's internal recognition post, look for an identifiable recipient
+and a specific achievement readers can evaluate. If the recipient is given only
+by first name and the post offers generic workplace praise, set substantive=false.
+Never supply a missing surname. An independently reportable change to a public
+service can support its own story when the source explains what changed.
 Return five_ws as supporting fact IDs for who, what, where, when and why.
 Every value in those lists must EXACTLY match a facts[].id in this same packet;
 never put prose, numbers, evidence quotations or invented IDs in these lists.
@@ -224,6 +229,8 @@ An unknown cause alone does not answer why the story matters. Reject repetitive
 paraphrases, generic background, promotional praise, mixed-language artifacts,
 and empty prose added to reach a word count. Check that the five_ws fact IDs
 really answer their assigned questions; labels alone do not prove completeness.
+Hold a standalone employee award based only on a first name and generic praise.
+Never infer a recipient's identity or the public benefit of an internal project.
 Reject stale events presented as current, unresolved relative dates (today,
 tonight, next week) that confuse readers, or a feed date used as an event date.
 Do not demand an event date invented for a timeless topic: hold incomplete
