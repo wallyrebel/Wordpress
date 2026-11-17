@@ -1,6 +1,7 @@
 """Regression cases for thin-source rejection and the five-W publication contract."""
 import json
 import unittest
+import requests
 from dataclasses import replace
 from datetime import datetime, timezone, timedelta
 from unittest.mock import Mock, patch
@@ -202,6 +203,22 @@ class PublicationBoundaryTests(unittest.TestCase):
 
 
 class DuplicateLookupTests(unittest.TestCase):
+    def test_exact_page_boundary_continues_to_next_status(self):
+        wp = WordPressAPI('https://example.org', 'test', 'test')
+        wp.supported_statuses = ['publish', 'private']
+        response = requests.Response()
+        response.status_code = 400
+        response._content = b'{"code":"rest_post_invalid_page_number"}'
+        error = requests.HTTPError(response=response)
+        wp.request = Mock(side_effect=[
+            [{'id': i, 'title': {'rendered': 'Other story'}} for i in range(100)],
+            error, [{'id': 201, 'title': {'rendered': 'Exact match'}}]])
+        self.assertEqual(wp.find_duplicate_headline('Exact match'), 201)
+        self.assertEqual(wp.request.call_args.kwargs['params']['status'], 'private')
+        wp.request = Mock(side_effect=error)
+        with self.assertRaises(requests.HTTPError):
+            list(wp.posts())
+
     def test_exact_normalized_title_and_pagination(self):
         wp = WordPressAPI('https://example.org','test','test')
         wp.supported_statuses = ['publish']

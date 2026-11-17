@@ -75,9 +75,19 @@ class WordPressAPI:
         # Query each supported status explicitly; status=any can omit states.
         for status in self.discover_statuses():
             for page in range(1, 51):
-                batch = self.request('GET', 'wp/v2/posts', params={
-                    'context': 'edit', 'status': status, 'per_page': 100, 'page': page,
-                    '_fields': 'id,status,date_gmt,modified_gmt,title,content,excerpt,link,slug', **query})
+                try:
+                    batch = self.request('GET', 'wp/v2/posts', params={
+                        'context': 'edit', 'status': status, 'per_page': 100, 'page': page,
+                        'orderby': 'id', 'order': 'asc',
+                        '_fields': 'id,status,date_gmt,modified_gmt,title,content,excerpt,link,slug', **query})
+                except requests.HTTPError as exc:
+                    # An exact multiple of 100 has no short final batch. Core
+                    # returns this specific 400 when the following page is empty.
+                    if page > 1 and safe_http_details(exc) == {
+                        'http_status': 400, 'api_error_code': 'rest_post_invalid_page_number'
+                    }:
+                        break
+                    raise
                 if not isinstance(batch, list) or any(not isinstance(p, dict) for p in batch):
                     raise ValueError('Malformed WordPress reconciliation response')
                 yield from batch
