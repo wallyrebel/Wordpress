@@ -375,7 +375,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     # Hold here instead of letting the server refuse a started write.
                     raise InsufficientSource('Short article has no eligible featured image and is not a public-service notice')
                 if wp:
-                    conflict = event_conflict(wp, entry, client, config.extraction_model)
+                    conflict = event_conflict(wp, entry, client, config.extraction_model, article.headline)
                     if conflict:
                         raise InsufficientSource(conflict['reason'] + '; post IDs ' + ','.join(map(str, conflict['post_ids'])))
                 record = {"status": "preview", "source_url": entry.link, "feed_url": entry.feed_url,
@@ -408,7 +408,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                 stage = "duplicate headline check"
                 # Refresh other producers' output immediately before any media/taxonomy write.
                 wp.reconcile(config.daily_article_goal, config.reconciliation_anchor_ids)
-                if wp.find_source_publication(entry.link) or event_conflict(wp, entry, client, config.extraction_model):
+                if wp.find_source_publication(entry.link) or event_conflict(wp, entry, client, config.extraction_model, article.headline):
                     raise InsufficientSource('Coverage appeared during preparation; reconcile before publication')
                 duplicate = wp.find_duplicate_headline(article.headline)
                 if duplicate:

@@ -59,16 +59,28 @@ def check_reader_text(text, crime_reports_allowed=False):
         raise ModelOutputError('Allegation or private-sensitive content requires separate editorial approval')
 
 
-def event_conflict(wp, entry, client, model):
+def event_conflict(wp, entry, client, model, headline=None):
     """Conservatively hold similar events across different source URLs/producers."""
+    seen = set()
+    for query in dict.fromkeys((entry.title, headline)):
+        if not query:
+            continue
+        candidates = [p for p in wp.event_candidates(query) if p['id'] not in seen]
+        if not candidates:
+            continue
+        match = compare_event_candidates(wp, entry, client, model, candidates)
+        if match:
+            return match
+        seen.update(p['id'] for p in candidates)
+    return None
+
+
+def compare_event_candidates(wp, entry, client, model, candidates):
     from ai_rewriter import StrictModel, _call, clean_text
     class Decision(StrictModel):
         matched_post_id: int
         uncertain: bool
         same_event: bool
-    candidates = wp.event_candidates(entry.title)
-    if not candidates:
-        return None
     # Do not transmit unpublished/private article bodies to a model.
     if any(p['status'] != 'publish' for p in candidates):
         return {'reason': 'Possible event already exists in an unpublished status; editorial reconciliation required',

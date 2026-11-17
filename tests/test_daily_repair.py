@@ -140,6 +140,24 @@ class RepairBoundaryTests(TestCase):
         stats=f.run_flow()
         self.assertEqual(stats['errors'],1);f.wp.upsert.assert_not_called();f.wp.upload_media.assert_not_called()
 
+    def test_edited_headline_finds_repeat_meeting_hidden_by_social_caption(self):
+        original_title = "Join us for an upcoming informational meeting to learn how you can earn your degree"
+        edited_title = "Ole Miss-Tupelo to host Zoom meeting on education leadership degrees"
+        previous = post(34086, 'publish')
+        previous["title"] = {"raw": "Ole Miss-Tupelo to host online session on Educational Leadership degrees"}
+        index = CoverageIndex([previous], ["publish"])
+        self.assertEqual(index.event_candidates(original_title), [])
+        wp = Mock()
+        wp.event_candidates.side_effect = index.event_candidates
+        wp._event_decisions = {}
+        wp.event_check_usage = []
+        same_meeting = SimpleNamespace(matched_post_id=34086, same_event=True, uncertain=False)
+        entry = SimpleNamespace(title=original_title, content="Nov. 18 at 6 p.m., online at Ole Miss-Tupelo.")
+        with patch("ai_rewriter._call", return_value=same_meeting) as compare:
+            match = event_conflict(wp, entry, Mock(), "editor", edited_title)
+        self.assertEqual(match["post_ids"], [34086])
+        self.assertEqual(compare.call_count, 1)
+
     def test_display_check_failure_keeps_the_live_post_and_does_not_repeat_write(self):
         f=self.f
         with patch('publication_verification.verify_article',side_effect=TimeoutError()):
