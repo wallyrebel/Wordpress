@@ -7,6 +7,12 @@ from bs4 import BeautifulSoup
 from safe_http import canonical_url
 
 CHICAGO = ZoneInfo('America/Chicago')
+TITLE_STOP_WORDS = set('the and for from with that this will have into its news mississippi county says said today update new public'.split())
+
+
+def event_terms(title):
+    words = re.findall(r'[a-z0-9]+', html.unescape(title).lower())
+    return list(dict.fromkeys(w for w in words if len(w) > 2 and w not in TITLE_STOP_WORDS))
 
 
 def text_field(post, name):
@@ -72,17 +78,15 @@ class CoverageIndex:
                 'inventory_scope': 'all supported statuses, modified in past 35 days plus fixed anchors; candidate source/title searches span all dates'}
 
     def event_candidates(self, title):
-        stop = set('the and for from with that this will have into its news mississippi county says said today update new public'.split())
-        def tokens(value):
-            return {w for w in re.findall(r'[a-z0-9]+', html.unescape(value).lower())
-                    if len(w) > 2 and w not in stop}
-        wanted = tokens(title)
+        wanted = set(event_terms(title))
+        if len(wanted) < 2:
+            return []
         ranked = []
         for post in self.posts.values():
             headline = text_field(post, 'title')
             headings = ' '.join(n.get_text(' ', strip=True) for n in
                                BeautifulSoup(text_field(post, 'content'), 'html.parser').find_all(['h2', 'h3']))
-            common = wanted & tokens(headline + ' ' + headings)
+            common = wanted.intersection(event_terms(headline + ' ' + headings))
             if len(common) >= 2 and len(common) / max(1, len(wanted)) >= 0.4:
                 ranked.append((len(common), post))
         ranked.sort(key=lambda pair: (-pair[0], -pair[1]['id']))

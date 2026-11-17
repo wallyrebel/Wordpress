@@ -24,6 +24,17 @@ def post(post_id=33889, status='publish', stamp='2026-10-27T12:00:00', body='', 
 
 
 class CoverageTests(TestCase):
+    def test_short_caption_cannot_match_two_terms_or_page_through_archive(self):
+        wp = WordPressAPI('https://example.org','test','test')
+        wp.supported_statuses = STATUSES
+        wp.coverage = CoverageIndex([post(1, title="Class 7A football playoff sites")], STATUSES)
+        wp.posts = Mock(return_value=[])
+        for caption in ("Class 7A", "Class Class 7A", "County news"):
+            self.assertEqual(wp.event_candidates(caption), [])
+        wp.posts.assert_not_called()
+        self.assertEqual([p['id'] for p in wp.event_candidates("Class 7A football playoff sites")], [1])
+        wp.posts.assert_called_once_with(search='class football')
+
     def test_chicago_calendar_boundaries_and_dst(self):
         for utc, local in [('2026-10-27T04:59:59','2026-10-26'),
                            ('2026-10-27T05:00:00','2026-10-27'),
@@ -83,6 +94,22 @@ class CoverageTests(TestCase):
 
 
 class RepairBoundaryTests(TestCase):
+    def test_source_recovery_checks_only_the_exact_feed_item(self):
+        f = self.f
+        other = replace(f.entry, link='https://example.org/not-requested')
+        with patch('main.fetch_feeds_with_raw', return_value=[(other, {}), (f.entry, {})]), \
+             patch('main.get_source_image', return_value=fixtures.NewsImage('test.jpg','Credit','https://example.org/a.jpg')), \
+             patch('main.rewrite_article', return_value=f.article) as rewrite:
+            stats = run_feed_processing(f.cfg, True, client=Mock(), wp=f.wp, authenticated_preview=True,
+                                        only_source_url=f.entry.link)
+            self.assertEqual(stats['previews'], 1)
+            self.assertEqual(rewrite.call_args.args[2], f.entry.link)
+            missing = run_feed_processing(f.cfg, True, client=Mock(), wp=f.wp, authenticated_preview=True,
+                                          only_source_url='https://example.org/not-in-feed')
+            self.assertIn('absent', missing['fatal_error']['stage'])
+            self.assertEqual(rewrite.call_count, 1)
+        f.wp.upsert.assert_not_called()
+
     def setUp(self):
         self.f = fixtures.PublishingTests()
         self.f.setUp()

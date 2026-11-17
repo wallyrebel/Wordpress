@@ -140,7 +140,8 @@ def processing_priority(item, config):
     return (tier, entry.published or entry.updated or datetime.max.replace(tzinfo=timezone.utc))
 
 
-def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None, authenticated_preview=False):
+def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None, authenticated_preview=False,
+                        only_source_url=None):
     started = time.monotonic()
     stats = {"created": 0, "previews": 0, "held": 0, "skipped": 0, "errors": 0,
              "duplicates": 0, "source_updates": 0, "model_attempts": 0,
@@ -182,6 +183,9 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
             wp.media_identity('msn-image-'+'0'*64)  # permission/lookup probe only; no asset creation
             pending = store.pending_writes() if store else []
             if pending:
+                if only_source_url:
+                    setup_stage = 'outstanding publication intents require full scheduled reconciliation'
+                    raise RuntimeError(setup_stage)
                 # Previously one interrupted request paused every later run until someone
                 # edited the cached database by hand. Settle it from the server instead.
                 setup_stage = 'pending source/media/post outcome reconciliation'
@@ -194,6 +198,13 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
         setup_stage = 'configured source feed read'
         entries = fetch_feeds_with_raw(config.rss_feeds, config.max_entries_per_feed,
                                        config.max_age_hours, stats)
+        if only_source_url:
+            # Select only an item actually discovered in the approved, current feeds.
+            # A recovery URL is never used as a network destination.
+            entries = [item for item in entries if item[0].link == only_source_url]
+            if not entries:
+                setup_stage = 'requested story absent from eligible configured feeds'
+                raise ValueError(setup_stage)
         # A fixed feed-list order let earlier busy sources starve later sources.
         entries.sort(key=lambda item: processing_priority(item, config))
         roundup_possible = sum(35 <= word_count(e.content) < 180 and editorial_format(e.content) == 'roundup'
@@ -375,6 +386,7 @@ def run_feed_processing(config, dry_run=False, limit=None, client=None, wp=None,
                     # Hold here instead of letting the server refuse a started write.
                     raise InsufficientSource('Short article has no eligible featured image and is not a public-service notice')
                 if wp:
+                    stage = "reviewed headline cross-source event matching"
                     conflict = event_conflict(wp, entry, client, config.extraction_model, article.headline)
                     if conflict:
                         raise InsufficientSource(conflict['reason'] + '; post IDs ' + ','.join(map(str, conflict['post_ids'])))
@@ -718,6 +730,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Model calls and local previews only; no WP/DB writes")
     parser.add_argument('--authenticated-preview', action='store_true', help='Read-only authenticated reconciliation plus model/image previews; no WP/DB writes')
     parser.add_argument("--max-items", type=int)
+    parser.add_argument("--only-source-url", help="Process only this exact article URL from an eligible configured feed")
     parser.add_argument("--schedule", action="store_true")
     parser.add_argument("--test-connection", action="store_true")
     args = parser.parse_args()
@@ -734,7 +747,8 @@ def main():
             WordPressAPI(config.wp_url, config.wp_username, config.wp_app_password).test_connection()
             return 0
         while True:
-            stats = run_feed_processing(config, dry_run, args.max_items, authenticated_preview=args.authenticated_preview)
+            stats = run_feed_processing(config, dry_run, args.max_items, authenticated_preview=args.authenticated_preview,
+                                        only_source_url=args.only_source_url)
             if not args.schedule:
                 return run_exit_code(stats)
             time.sleep(config.poll_interval_minutes * 60)

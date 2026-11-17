@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import requests
 from requests.auth import HTTPBasicAuth
 from datetime import datetime, timedelta, timezone
-from coverage import CoverageIndex, linked_sources, source_identity, text_field
+from coverage import CoverageIndex, event_terms, linked_sources, source_identity, text_field
 
 def safe_http_details(exc):
     """Diagnostic codes only: never response text, URLs, headers or credentials."""
@@ -141,10 +141,12 @@ class WordPressAPI:
         if self.coverage is None:
             raise ValueError('Reconcile WordPress before event matching')
         # A current source can repeat a long-planned event first covered months ago.
-        stop = set('the and for from with that this will have into its news mississippi county says said today update new public'.split())
-        terms = [w for w in re.findall(r'[a-z0-9]+', html.unescape(title).lower())
-                 if len(w) > 2 and w not in stop]
-        historic = list(self.posts(search=' '.join(terms[:2]))) if terms else []
+        terms = event_terms(title)
+        # Ranking requires two distinct matching terms. A one-term search can
+        # exhaust the archive page bound without producing a single candidate.
+        if len(terms) < 2:
+            return []
+        historic = list(self.posts(search=' '.join(terms[:2])))
         merged = CoverageIndex(list(self.coverage.posts.values()) + historic,
                                self.discover_statuses(), self.coverage.now)
         return merged.event_candidates(title)
